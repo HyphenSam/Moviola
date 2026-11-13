@@ -38,9 +38,33 @@ export type VideoTrack = Common & {
   frameRate: number | null
   colour: { primaries?: string; transfer?: string; matrix?: string; fullRange?: boolean; hdr: boolean }
 }
-export type AudioTrack = Common & { kind: 'audio'; sampleRate: number; channels: number }
+export type AudioTrack = Common & {
+  kind: 'audio'
+  sampleRate: number
+  channels: number
+  bitDepth: number | null // bits per sample of lossless audio (PCM, FLAC); null for lossy codecs
+}
 export type SubtitleTrack = Common & { kind: 'subtitle' }
 export type Track = VideoTrack | AudioTrack | SubtitleTrack
+
+/** Bits per sample of each PCM codec, as stored. Floats are marked, since no integer depth holds
+ * them exactly. μ-law and A-law store 8 bits that expand to 14. */
+export const PCM_BITS: Partial<Record<MediaCodec, { bits: number; float?: true }>> = {
+  'pcm-u8': { bits: 8 },
+  'pcm-s8': { bits: 8 },
+  ulaw: { bits: 8 },
+  alaw: { bits: 8 },
+  'pcm-s16': { bits: 16 },
+  'pcm-s16be': { bits: 16 },
+  'pcm-s24': { bits: 24 },
+  'pcm-s24be': { bits: 24 },
+  'pcm-s32': { bits: 32 },
+  'pcm-s32be': { bits: 32 },
+  'pcm-f32': { bits: 32, float: true },
+  'pcm-f32be': { bits: 32, float: true },
+  'pcm-f64': { bits: 64, float: true },
+  'pcm-f64be': { bits: 64, float: true },
+}
 
 export const hasVideo = (info: MediaInfo) => info.tracks.some((t) => t.kind === 'video')
 export const hasAudio = (info: MediaInfo) => info.tracks.some((t) => t.kind === 'audio')

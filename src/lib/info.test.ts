@@ -46,6 +46,7 @@ const audio = (over: Partial<Extract<MediaInfo['tracks'][number], { kind: 'audio
   canDecode: true,
   sampleRate: 48000,
   channels: 2,
+  bitDepth: null,
   ...over,
 })
 

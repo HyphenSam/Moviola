@@ -109,6 +109,17 @@ describe('probe', () => {
     expect(audio(info)[0].bitrate).toBeGreaterThan(100_000)
   })
 
+  it.each([
+    ['flac.flac', 16],
+    ['flac-24.flac', 24],
+    ['h264-flac.mkv', 16],
+    ['h264-pcm.mov', 16],
+    ['h264-aac.mp4', null],
+    ['vp9-opus.webm', null],
+  ])('reads the bit depth of %s’s lossless audio: %s', async (name, bits) => {
+    expect(audio(await probe(fixture(name)))[0].bitDepth).toBe(bits)
+  })
+
   it('refuses a file that isn’t media with the sentence the user sees', async () => {
     await expect(probe(fixture('notvideo.txt'))).rejects.toThrow(CANT_OPEN)
     expect(CANT_OPEN).toBe('Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.')

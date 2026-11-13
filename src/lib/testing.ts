@@ -46,6 +46,7 @@ export function fakeAudioTrack(over: Partial<AudioTrack> = {}): AudioTrack {
     canDecode: true,
     sampleRate: 48000,
     channels: 2,
+    bitDepth: null,
     ...over,
   }
 }

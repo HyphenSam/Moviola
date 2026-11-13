@@ -71,7 +71,12 @@ type VideoTrack = Common & {
   frameRate: number | null
   colour: { primaries?: string; transfer?: string; matrix?: string; fullRange?: boolean; hdr: boolean }
 }
-type AudioTrack = Common & { kind: 'audio'; sampleRate: number; channels: number }
+type AudioTrack = Common & {
+  kind: 'audio'
+  sampleRate: number
+  channels: number
+  bitDepth: number | null // PCM (from the codec) and FLAC (from STREAMINFO); null for lossy codecs
+}
 type SubtitleTrack = Common & { kind: 'subtitle' }
 ```
 
@@ -163,16 +168,21 @@ Gets the audio out of a video, losslessly by default.
   hold), so other rates are resampled to 44.1 kHz (multiples of 11.025 kHz) or 48 kHz, and the
   caption adds ", resampled to 48 kHz". If the source is already MP3, a hint says "Already MP3:
   Original keeps it without loss."
-- **WAV**: 16-bit (default) or 24-bit PCM, source sample rate and channels. Badge: "Lossless" when
-  the source is PCM or FLAC (or another lossless codec), otherwise "Decodes to WAV", with the caption
-  "WAV is uncompressed, but it can't restore what the original codec already lost." (Use the
-  Re-encodes badge style.)
-  When lossless, the caption names the source: "FLAC, decoded to 24-bit WAV. No quality is lost."
-- **FLAC**: compression level isn't exposed. Same badge rule as WAV ("Decodes to FLAC"), caption
-  "FLAC is lossless, but it can't restore what the original codec already lost.", or "PCM 16-bit,
-  compressed into FLAC. No quality is lost." from a lossless source. Uses
-  `@mediabunny/flac-encoder` unless the browser can encode FLAC. The encoder picks 16 or 24 bits from
-  the decoded samples, so the depth can differ between browsers (Firefox decodes to float, giving 24).
+- **WAV**: 16-bit (default) or 24-bit PCM, source sample rate and channels. Badge: "Lossless" only
+  when every sample survives: the source is PCM or FLAC with integer samples no deeper than the
+  chosen depth ("FLAC, decoded to 24-bit WAV. No quality is lost."). Otherwise "Decodes to WAV" (in
+  the Re-encodes badge style), with the caption "WAV is uncompressed, but it can't restore what the
+  original codec already lost." for a lossy source, or, for a lossless one that doesn't fit, "24-bit
+  FLAC is rounded to 16 bits. Choose 24-bit to keep every sample." (float PCM: "PCM 32-bit float is
+  rounded to 24 bits.").
+- **FLAC**: compression level isn't exposed. The depth follows the source: 24 bits for lossless
+  sources deeper than 16 bits (or float), 16 otherwise, lossy sources included. Same badge rule as WAV
+  ("Decodes to FLAC"): "PCM 16-bit, compressed into 16-bit FLAC. No quality is lost.", "FLAC is
+  lossless, but it can't restore what the original codec already lost.", or "PCM 32-bit float is
+  rounded to 24 bits." Uses `@mediabunny/flac-encoder` unless the browser can encode FLAC.
+- The integer samples for FLAC are made in `run.ts` from a float copy, not by the browser's
+  `AudioData.copyTo`: Chrome's s32 to s16 and Firefox's float to s32 conversions both land a step off,
+  which would break the Lossless promise. Checked sample for sample in both browsers.
 - Without an encoder (no WebAssembly), MP3 and FLAC are disabled with "This browser can't encode
   MP3." WAV needs none: Mediabunny writes PCM itself.
 - Converting needs the track to be decodable. If it isn't (AC-3, DTS, TrueHD everywhere): MP3, WAV
@@ -386,6 +396,7 @@ sources, committed. At least:
 | `h264-aac.ts` | `h264-aac.mp4` in MPEG-TS, starting near 1.4 s | non-zero start, the fallback preview |
 | `aac.m4a` | AAC audio only | audio-only behaviour |
 | `flac.flac` | FLAC audio only | a bare FLAC file's length (Mediabunny misreads it if probed carelessly) |
+| `flac-24.flac` | 24-bit FLAC audio only | bit depth from STREAMINFO; 16-bit WAV of it isn't lossless |
 | `notvideo.txt` | text | the "can't open" message |
 
 Node tests open these with `FilePathSource` (or a `BlobSource` over the file's bytes) and check

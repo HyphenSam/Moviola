@@ -1,4 +1,5 @@
 import {
+  AudioSample,
   BlobSource,
   BufferTarget,
   Conversion,
@@ -6,6 +7,7 @@ import {
   Input,
   Output,
   StreamTarget,
+  type ConversionAudioOptions,
   type InputTrack,
   type StreamTargetChunk,
 } from 'mediabunny'
@@ -25,10 +27,48 @@ export type RunResult = { size: number; buffer: ArrayBuffer | null }
 
 type Options = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
 
+/** Float samples to 16 or 32-bit integers, scaled by 2^15 or 2^31 and rounded, so a value that came
+ * from integers lands back on them exactly (a 24-bit value in 32 bits has its low eight bits zero, and
+ * survives the FLAC encoder's cut back to 24). */
+export function floatToInt(samples: Float32Array, bits: 16 | 32): Int16Array | Int32Array {
+  const out = bits === 16 ? new Int16Array(samples.length) : new Int32Array(samples.length)
+  const scale = 2 ** (bits - 1)
+  for (let i = 0; i < samples.length; i++) {
+    out[i] = Math.max(-scale, Math.min(scale - 1, Math.round(samples[i] * scale)))
+  }
+  return out
+}
+
+/** Mediabunny's options for re-encoding the plan's audio. Integer samples (which set FLAC's depth)
+ * are made here rather than by `sampleFormat`, which converts with the browser's `AudioData.copyTo`:
+ * Chrome's s32 to s16 and Firefox's float to s32 both land a step off (235 becomes 234). Copying out
+ * as float is exact in both, and so is rounding from there. */
+function audioOptions({ sampleFormat, ...encode }: NonNullable<Plan['audio']>): ConversionAudioOptions {
+  if (!sampleFormat) return { ...encode, forceTranscode: true }
+  const bits = sampleFormat === 's16' ? 16 : 32
+  return {
+    ...encode,
+    forceTranscode: true,
+    sampleFormat: 'f32',
+    process: (sample) => {
+      const floats = new Float32Array(sample.allocationSize({ format: 'f32', planeIndex: 0 }) / 4)
+      sample.copyTo(floats, { format: 'f32', planeIndex: 0 })
+      return new AudioSample({
+        data: floatToInt(floats, bits),
+        format: sampleFormat,
+        numberOfChannels: sample.numberOfChannels,
+        sampleRate: sample.sampleRate,
+        timestamp: sample.timestamp,
+      })
+    },
+  }
+}
+
 /** Runs a plan: every kept track copied as is (`copy: { mode: 'forced' }`, so nothing is ever quietly
- * re-encoded) into the plan's container, apart from audio the plan says to re-encode. With a `writable` (a file the user chose) the output is
- * streamed to it; without one it's built in memory and returned. A cancelled or failed job aborts the
- * writable, so a half-written file is discarded rather than saved. */
+ * re-encoded) into the plan's container, apart from audio the plan says to re-encode. With a
+ * `writable` (a file the user chose) the output is streamed to it; without one it's built in memory
+ * and returned. A cancelled or failed job aborts the writable, so a half-written file is discarded
+ * rather than saved. */
 export async function run(
   file: File,
   plan: Plan,
@@ -65,9 +105,7 @@ export async function run(
       input,
       output,
       video: keep,
-      audio: encode
-        ? (track) => (plan.keep.includes(track.id) ? { ...encode, forceTranscode: true } : { discard: true })
-        : keep,
+      audio: encode ? (track) => (plan.keep.includes(track.id) ? audioOptions(encode) : { discard: true }) : keep,
       // Some containers can't start before 0 (Ogg, with Opus's pre-roll at −7 ms), so copied media may
       // be shifted; Mediabunny keeps every track in sync when it does. Only a plan that re-encodes
       // lets Mediabunny transcode; anything else is copied or refused.

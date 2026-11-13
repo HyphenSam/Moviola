@@ -21,7 +21,14 @@ export type Plan = {
   keep: number[]
   /** Re-encode the kept audio to this codec; without it, audio is copied. The source's sample rate
    * and channels are kept unless `sampleRate` or `numberOfChannels` say otherwise. */
-  audio?: { codec: AudioEncodeTarget; bitrate?: number; numberOfChannels?: number; sampleRate?: number }
+  audio?: {
+    codec: AudioEncodeTarget
+    bitrate?: number
+    numberOfChannels?: number
+    sampleRate?: number
+    /** The samples' format before encoding, which sets FLAC's depth: 's16' for 16 bits, 's32' for 24. */
+    sampleFormat?: 's16' | 's32'
+  }
 }
 
 /** A planner's answer: a plan, the caption under the badge, the badge's own words when Lossless or

@@ -15,7 +15,7 @@ import {
   type InputFormat,
   type InputTrack,
 } from 'mediabunny'
-import { isHdrTransfer, plainTags, type Container, type MediaInfo, type Track } from '@/lib/info'
+import { isHdrTransfer, PCM_BITS, plainTags, type Container, type MediaInfo, type Track } from '@/lib/info'
 
 export const CANT_OPEN = 'Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.'
 
@@ -77,6 +77,19 @@ export async function firstTimestamp(input: Input): Promise<number> {
   return Math.max(0, await input.getFirstTimestamp())
 }
 
+/** FLAC's bits per sample, from the STREAMINFO block its decoder description starts with ("fLaC",
+ * a 4-byte block header, then 10 bytes of block and frame sizes, 20 bits of sample rate, 3 of
+ * channels and 5 of bits per sample, less one). */
+function flacBitDepth(config: AudioDecoderConfig | null): number | null {
+  const description = config?.description
+  if (!description) return null
+  const bytes = ArrayBuffer.isView(description)
+    ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+    : new Uint8Array(description)
+  if (bytes.length < 22 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'fLaC') return null
+  return (((bytes[20] & 1) << 4) | (bytes[21] >> 4)) + 1
+}
+
 async function describeTrack(track: InputTrack): Promise<Track | null> {
   const [codec, codecString, language, name, disposition, stats, canDecode] = await Promise.all([
     track.getCodec(),
@@ -123,7 +136,8 @@ async function describeTrack(track: InputTrack): Promise<Track | null> {
   }
   if (track.isAudioTrack()) {
     const [sampleRate, channels] = await Promise.all([track.getSampleRate(), track.getNumberOfChannels()])
-    return { ...common, kind: 'audio', sampleRate, channels }
+    const bitDepth = codec === 'flac' ? flacBitDepth(await track.getDecoderConfig()) : codec && PCM_BITS[codec]?.bits
+    return { ...common, kind: 'audio', sampleRate, channels, bitDepth: bitDepth ?? null }
   }
   if (track.type === 'subtitle') return { ...common, kind: 'subtitle' }
   return null

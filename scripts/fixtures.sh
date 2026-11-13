@@ -56,6 +56,10 @@ ff $(tone 440) -c:a aac -b:a 64k aac.m4a
 # shellcheck disable=SC2046
 ff $(tone 440) -c:a flac flac.flac
 
+# 24-bit FLAC: 16-bit WAV rounds its samples, so that conversion mustn't be called lossless.
+# shellcheck disable=SC2046
+ff $(tone 440) -c:a flac -sample_fmt s32 -bits_per_raw_sample 24 flac-24.flac
+
 printf 'This is not a video.\n' > notvideo.txt
 
 # Every fixture stays small enough to commit.

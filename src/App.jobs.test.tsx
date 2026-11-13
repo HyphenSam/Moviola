@@ -129,11 +129,13 @@ describe('Extract audio', () => {
 
     it('calls FLAC from PCM lossless', async () => {
       const { user } = await openOnExtract(
-        fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'pcm-s16', codecString: 'pcm-s16' })] }),
+        fakeInfo({
+          tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'pcm-s16', codecString: 'pcm-s16', bitDepth: 16 })],
+        }),
       )
       await user.click(format('FLAC'))
       expect(screen.getByText('Lossless')).toBeInTheDocument()
-      expect(screen.getByText('PCM 16-bit, compressed into FLAC. No quality is lost.')).toBeInTheDocument()
+      expect(screen.getByText('PCM 16-bit, compressed into 16-bit FLAC. No quality is lost.')).toBeInTheDocument()
     })
 
     it('rules out converting a track this browser can’t decode, saying Original still works', async () => {

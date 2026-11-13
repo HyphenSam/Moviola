@@ -1,8 +1,8 @@
 import type { Capabilities } from '../capabilities'
 import { losslessAudioContainer, type ContainerCodecs, type Destination } from '../containers'
-import { audioSummary, codecName, languageName, type AudioTrack, type MediaInfo } from '../info'
+import { audioSummary, codecName, languageName, PCM_BITS, type AudioTrack, type MediaInfo } from '../info'
 import { outputName } from '../names'
-import type { AudioEncodeTarget, Plan, Planned } from '../plan'
+import type { Plan, Planned } from '../plan'
 
 export type AudioFormat = 'original' | 'mp3' | 'wav' | 'flac'
 export type Mp3Bitrate = 128 | 192 | 256 | 320
@@ -64,10 +64,6 @@ export function formatProblems(
     flac: undecodable ?? (caps.encodeAudio.flac ? null : 'This browser can’t encode FLAC.'),
   }
 }
-
-// PCM in any form, and FLAC, hold every sample exactly, so decoding them loses nothing.
-const isLossless = (codec: string) =>
-  codec === 'flac' || codec.startsWith('pcm-') || codec === 'ulaw' || codec === 'alaw'
 
 /** MP3 reaches 320 kbps only at 32, 44.1 and 48 kHz (lower rates top out at 160 kbps or less, and
  * higher ones it can't hold), so other rates go to the nearest of those families. */
@@ -132,17 +128,42 @@ export function planExtractAudio(
     }
   }
 
-  // WAV and FLAC store every sample they're given; whether that's lossless depends on the source.
-  const lossless = isLossless(track.codec)
-  const [destination, target, name, done]: [Destination, AudioEncodeTarget, string, string] =
+  // WAV and FLAC store every sample they're given at their depth. That's lossless only from a
+  // lossless source (PCM or FLAC) whose samples fit: integers no deeper than the target. Floats never
+  // fit an integer depth exactly.
+  const pcm = PCM_BITS[track.codec]
+  const lossless = track.codec === 'flac' || !!pcm
+  const float = !!pcm?.float
+  const sourceBits = track.bitDepth ?? 16
+  // WAV's depth is the user's; FLAC's follows the source, so 16-bit audio isn't padded out to 24 (the
+  // encoder takes its depth from the decoded samples, and Firefox decodes to float).
+  const bits = format === 'wav' ? settings.wavBits : lossless && (float || sourceBits > 16) ? 24 : 16
+  const name = format === 'wav' ? 'WAV' : 'FLAC'
+  const audio: Plan['audio'] =
     format === 'wav'
-      ? [WAV, settings.wavBits === 24 ? 'pcm-s24' : 'pcm-s16', 'WAV', `decoded to ${settings.wavBits}-bit WAV`]
-      : [FLAC, 'flac', 'FLAC', 'compressed into FLAC']
-  if (lossless)
-    return { plan: planFor(destination, true, { codec: target }), caption: `${codec}, ${done}. No quality is lost.` }
+      ? { codec: bits === 24 ? 'pcm-s24' : 'pcm-s16' }
+      : { codec: 'flac', sampleFormat: bits === 24 ? 's32' : 's16' }
+  const badge = `Decodes to ${name}`
+
+  if (!lossless) {
+    return {
+      plan: planFor(format === 'wav' ? WAV : FLAC, false, audio),
+      caption: `${name} is ${format === 'wav' ? 'uncompressed' : 'lossless'}, but it can’t restore what the original codec already lost.`,
+      badge,
+    }
+  }
+  if (!float && sourceBits <= bits) {
+    const done = format === 'wav' ? `decoded to ${bits}-bit WAV` : `compressed into ${bits}-bit FLAC`
+    return {
+      plan: planFor(format === 'wav' ? WAV : FLAC, true, audio),
+      caption: `${codec}, ${done}. No quality is lost.`,
+    }
+  }
+  const source = track.codec === 'flac' ? `${sourceBits}-bit FLAC` : codec
+  const keep = format === 'wav' && !float && sourceBits <= 24 ? ' Choose 24-bit to keep every sample.' : ''
   return {
-    plan: planFor(destination, false, { codec: target }),
-    caption: `${name} is ${format === 'wav' ? 'uncompressed' : 'lossless'}, but it can’t restore what the original codec already lost.`,
-    badge: `Decodes to ${name}`,
+    plan: planFor(format === 'wav' ? WAV : FLAC, false, audio),
+    caption: `${source} is rounded to ${bits} bits.${keep}`,
+    badge,
   }
 }

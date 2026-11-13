@@ -103,9 +103,15 @@ describe('planExtractAudio, Original', () => {
 const pcm = fakeInfo({
   name: 'take.mov',
   container: 'mov',
-  tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'pcm-s16', codecString: 'pcm-s16' })],
+  tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'pcm-s16', codecString: 'pcm-s16', bitDepth: 16 })],
 })
-const flac = fakeAudioInfo({ name: 'a.flac', tracks: [fakeAudioTrack({ id: 1, codec: 'flac', codecString: 'flac' })] })
+const flacAt = (bitDepth: number) =>
+  fakeAudioInfo({ name: 'a.flac', tracks: [fakeAudioTrack({ id: 1, codec: 'flac', codecString: 'flac', bitDepth })] })
+const flac = flacAt(16)
+const float = fakeAudioInfo({
+  name: 'mix.wav',
+  tracks: [fakeAudioTrack({ id: 1, codec: 'pcm-f32', codecString: 'pcm-f32', bitDepth: 32 })],
+})
 // The h264-ac3.mkv fixture's info, as a browser sees it: no browser decodes AC-3.
 const ac3 = fakeInfo({
   name: 'h264-ac3.mkv',
@@ -210,10 +216,34 @@ describe('planExtractAudio, WAV', () => {
       caption: 'FLAC, decoded to 24-bit WAV. No quality is lost.',
     })
   })
+
+  it('isn’t lossless when 16 bits can’t hold a 24-bit source, and says how to keep it', () => {
+    expect(plan(flacAt(24), { format: 'wav' })).toMatchObject({
+      plan: { lossless: false, audio: { codec: 'pcm-s16' } },
+      caption: '24-bit FLAC is rounded to 16 bits. Choose 24-bit to keep every sample.',
+      badge: 'Decodes to WAV',
+    })
+    expect(plan(flacAt(24), { format: 'wav', wavBits: 24 })).toMatchObject({
+      plan: { lossless: true },
+      caption: 'FLAC, decoded to 24-bit WAV. No quality is lost.',
+    })
+    const pcm24 = fakeAudioInfo({ tracks: [fakeAudioTrack({ id: 1, codec: 'pcm-s24', bitDepth: 24 })] })
+    expect(plan(pcm24, { format: 'wav' }).caption).toBe(
+      'PCM 24-bit is rounded to 16 bits. Choose 24-bit to keep every sample.',
+    )
+  })
+
+  it('isn’t lossless from float PCM, which no integer depth holds exactly', () => {
+    expect(plan(float, { format: 'wav', wavBits: 24 })).toMatchObject({
+      plan: { lossless: false },
+      caption: 'PCM 32-bit float is rounded to 24 bits.',
+      badge: 'Decodes to WAV',
+    })
+  })
 })
 
 describe('planExtractAudio, FLAC', () => {
-  it('compresses PCM losslessly', () => {
+  it('compresses PCM losslessly at its own depth', () => {
     expect(plan(pcm, { format: 'flac' })).toEqual({
       plan: {
         kind: 'audio',
@@ -222,15 +252,32 @@ describe('planExtractAudio, FLAC', () => {
         mimeType: 'audio/flac',
         lossless: true,
         keep: [2],
-        audio: { codec: 'flac' },
+        audio: { codec: 'flac', sampleFormat: 's16' },
       },
-      caption: 'PCM 16-bit, compressed into FLAC. No quality is lost.',
+      caption: 'PCM 16-bit, compressed into 16-bit FLAC. No quality is lost.',
+    })
+  })
+
+  // The FLAC encoder takes its depth from the decoded samples, and browsers decode to different
+  // formats (Firefox to float), so the depth is set from the source rather than left to chance.
+  it('keeps a 24-bit source at 24 bits', () => {
+    expect(plan(flacAt(24), { format: 'flac' })).toMatchObject({
+      plan: { lossless: true, audio: { codec: 'flac', sampleFormat: 's32' } },
+      caption: 'FLAC, compressed into 24-bit FLAC. No quality is lost.',
+    })
+  })
+
+  it('rounds float PCM to 24 bits, saying so', () => {
+    expect(plan(float, { format: 'flac' })).toMatchObject({
+      plan: { lossless: false, audio: { codec: 'flac', sampleFormat: 's32' } },
+      caption: 'PCM 32-bit float is rounded to 24 bits.',
+      badge: 'Decodes to FLAC',
     })
   })
 
   it('says what it can’t restore from a lossy source', () => {
     expect(plan(fakeInfo(), { format: 'flac' })).toMatchObject({
-      plan: { lossless: false, name: 'holiday.flac' },
+      plan: { lossless: false, name: 'holiday.flac', audio: { codec: 'flac', sampleFormat: 's16' } },
       caption: 'FLAC is lossless, but it can’t restore what the original codec already lost.',
       badge: 'Decodes to FLAC',
     })

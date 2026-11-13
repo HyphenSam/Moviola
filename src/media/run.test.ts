@@ -8,7 +8,7 @@ import type { Plan } from '@/lib/plan'
 import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
 import { probe } from './probe'
-import { CANCELLED, run } from './run'
+import { CANCELLED, floatToInt, run } from './run'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -89,17 +89,19 @@ describe('extract audio, Original', () => {
 // end here. Other sources are checked by hand in the browser.
 describe('extract audio, converted', () => {
   it.each([
-    [{ format: 'wav', wavBits: 16 }, 'h264-pcm.wav', 'wav', 'pcm-s16'],
-    [{ format: 'wav', wavBits: 24 }, 'h264-pcm.wav', 'wav', 'pcm-s24'],
-    [{ format: 'flac' }, 'h264-pcm.flac', 'flac', 'flac'],
-    [{ format: 'mp3', mp3Bitrate: 128 }, 'h264-pcm.mp3', 'mp3', 'mp3'],
-  ] as const)('h264-pcm.mov as %o → %s', async (over, outName, container, codec) => {
+    [{ format: 'wav', wavBits: 16 }, 'h264-pcm.wav', 'wav', 'pcm-s16', 16],
+    [{ format: 'wav', wavBits: 24 }, 'h264-pcm.wav', 'wav', 'pcm-s24', 24],
+    // 16-bit in, 16-bit FLAC out: the depth follows the source, not the decoder's sample format.
+    [{ format: 'flac' }, 'h264-pcm.flac', 'flac', 'flac', 16],
+    [{ format: 'mp3', mp3Bitrate: 128 }, 'h264-pcm.mp3', 'mp3', 'mp3', null],
+  ] as const)('h264-pcm.mov as %o → %s', async (over, outName, container, codec, bitDepth) => {
     const { info, plan, output, outInfo } = await extract('h264-pcm.mov', null, over)
     expect(plan.name).toBe(outName)
     expect(outInfo.container).toBe(container)
     expect(outInfo.tracks).toHaveLength(1)
     const [source, out] = [info, outInfo].map((i) => i.tracks.find((t) => t.kind === 'audio')!) as AudioTrack[]
     expect(out.codec).toBe(codec)
+    expect(out.bitDepth).toBe(bitDepth)
     // MP3 resamples 16 kHz to 48 kHz to reach its full bitrate range; the rest keep the rate.
     expect([out.sampleRate, out.channels]).toEqual([plan.audio?.sampleRate ?? source.sampleRate, source.channels])
     expect(outInfo.duration).toBeCloseTo(info.duration, 1)
@@ -116,6 +118,29 @@ describe('extract audio, converted', () => {
     const { outInfo } = await extract('h264-pcm.mov', null, { format: 'mp3', mp3Bitrate: kbps })
     const bitrate = outInfo.tracks[0].bitrate!
     expect(Math.abs(bitrate - kbps * 1000) / (kbps * 1000)).toBeLessThan(0.03)
+  })
+})
+
+describe('floatToInt', () => {
+  it('puts every 24-bit value exactly where 24-bit FLAC reads it back, eight bits up', () => {
+    const values = [0, 1, -1, 235 << 8, 0x7fffff, -0x800000, 1234567, -7654321]
+    const out = floatToInt(new Float32Array(values.map((v) => v / 2 ** 23)), 32)
+    expect(out).toBeInstanceOf(Int32Array)
+    expect([...out].map((v) => v >> 8)).toEqual(values)
+    expect([...out].every((v) => (v & 0xff) === 0)).toBe(true)
+  })
+
+  // Chrome's own s32 to s16 copy gives 234 for this sample of the FLAC fixture.
+  it('gives 16-bit values back exactly', () => {
+    const values = [0, 235, -235, 32767, -32768, 1161]
+    const out = floatToInt(new Float32Array(values.map((v) => v / 32768)), 16)
+    expect(out).toBeInstanceOf(Int16Array)
+    expect([...out]).toEqual(values)
+  })
+
+  it('clamps full scale', () => {
+    expect([...floatToInt(new Float32Array([1, -1, 1.5]), 32)]).toEqual([2147483647, -2147483648, 2147483647])
+    expect([...floatToInt(new Float32Array([1, -1.5]), 16)]).toEqual([32767, -32768])
   })
 })
 
