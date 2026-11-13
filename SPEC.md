@@ -157,14 +157,24 @@ Gets the audio out of a video, losslessly by default.
   every row. The settings view shows a caption such as "AAC, copied as is into .m4a. No quality is
   lost." Badge: Lossless.
 - **MP3**: bitrate segmented 128 / 192 / 256 / 320 kbps (default 192), CBR. Uses the browser's
-  encoder if `canEncodeAudio('mp3')`, else registers `@mediabunny/mp3-encoder`. Badge: Re-encodes.
-  If the source is already MP3, a hint says "Already MP3: Original keeps it without loss."
+  encoder if `canEncodeAudio('mp3')`, else registers `@mediabunny/mp3-encoder`. Badge: Re-encodes,
+  caption "AAC re-encoded to MP3 at 192 kbps." More than two channels are mixed down to stereo. MP3
+  reaches 320 kbps only at 32, 44.1 and 48 kHz (lower rates top out at 160 kbps, higher ones it can't
+  hold), so other rates are resampled to 44.1 kHz (multiples of 11.025 kHz) or 48 kHz, and the
+  caption adds ", resampled to 48 kHz". If the source is already MP3, a hint says "Already MP3:
+  Original keeps it without loss."
 - **WAV**: 16-bit (default) or 24-bit PCM, source sample rate and channels. Badge: "Lossless" when
   the source is PCM or FLAC (or another lossless codec), otherwise "Decodes to WAV", with the caption
   "WAV is uncompressed, but it can't restore what the original codec already lost." (Use the
   Re-encodes badge style.)
-- **FLAC**: compression level isn't exposed. Same badge rule and caption as WAV.
-  Uses `@mediabunny/flac-encoder` unless the browser can encode FLAC.
+  When lossless, the caption names the source: "FLAC, decoded to 24-bit WAV. No quality is lost."
+- **FLAC**: compression level isn't exposed. Same badge rule as WAV ("Decodes to FLAC"), caption
+  "FLAC is lossless, but it can't restore what the original codec already lost.", or "PCM 16-bit,
+  compressed into FLAC. No quality is lost." from a lossless source. Uses
+  `@mediabunny/flac-encoder` unless the browser can encode FLAC. The encoder picks 16 or 24 bits from
+  the decoded samples, so the depth can differ between browsers (Firefox decodes to float, giving 24).
+- Without an encoder (no WebAssembly), MP3 and FLAC are disabled with "This browser can't encode
+  MP3." WAV needs none: Mediabunny writes PCM itself.
 - Converting needs the track to be decodable. If it isn't (AC-3, DTS, TrueHD everywhere): MP3, WAV
   and FLAC are disabled with "This browser can't decode AC-3. Original still works."
 - Output name: `<stem>.<ext>`, plus ` (track 2)` when the file has more than one audio track and

@@ -1,9 +1,12 @@
 import type { OutputContainer } from './containers'
 
+/** The codecs Extract audio converts to. PCM is written by Mediabunny itself; MP3 and FLAC may need
+ * an add-on encoder (`src/media/encoders.ts`). */
+export type AudioEncodeTarget = 'mp3' | 'flac' | 'pcm-s16' | 'pcm-s24'
+
 /** A job, as plain data: what the worker should write. Planners make one from the source's
  * MediaInfo and the tool's settings; `src/media/run.ts` turns it into a Mediabunny Conversion.
- * Every track is copied as is (`copy: { mode: 'forced' }`); tools that re-encode add their options
- * here when they arrive. */
+ * Every track is copied as is (`copy: { mode: 'forced' }`) unless the plan says to re-encode it. */
 export type Plan = {
   /** What the result holds, for the exports strip's icon. */
   kind: 'audio' | 'video'
@@ -12,13 +15,18 @@ export type Plan = {
   name: string
   /** For the save dialog and the downloaded file. */
   mimeType: string
-  /** The badge beside the action: nothing is re-encoded. */
+  /** The badge beside the action: no quality is lost. */
   lossless: boolean
-  /** The source track ids to copy; every other track is left out. */
+  /** The source track ids to keep; every other track is left out. */
   keep: number[]
+  /** Re-encode the kept audio to this codec; without it, audio is copied. The source's sample rate
+   * and channels are kept unless `sampleRate` or `numberOfChannels` say otherwise. */
+  audio?: { codec: AudioEncodeTarget; bitrate?: number; numberOfChannels?: number; sampleRate?: number }
 }
 
-/** A planner's answer: a plan and the caption under the badge, or the reasons the job can't run,
- * each a sentence for the user. */
+/** A planner's answer: a plan, the caption under the badge, the badge's own words when Lossless or
+ * Re-encodes would mislead, and hints worth knowing; or the reasons the job can't run, each a
+ * sentence for the user. */
 export type Planned =
-  { plan: Plan; caption: string; problems?: never } | { plan?: never; caption?: never; problems: string[] }
+  | { plan: Plan; caption: string; badge?: string; hints?: string[]; problems?: never }
+  | { plan?: never; caption?: never; badge?: never; hints?: never; problems: string[] }

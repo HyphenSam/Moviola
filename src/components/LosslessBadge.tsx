@@ -2,8 +2,9 @@ import { Check, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 /** The Honest Label beside every action (DESIGN.md): the icon and the words carry the meaning, the
- * colour only backs them up. */
-export function LosslessBadge({ lossless }: { lossless: boolean }) {
+ * colour only backs them up. `label` replaces "Re-encodes" where that would mislead ("Decodes to
+ * WAV"); it keeps the Re-encodes style. */
+export function LosslessBadge({ lossless, label }: { lossless: boolean; label?: string }) {
   const Icon = lossless ? Check : RefreshCw
   return (
     <span
@@ -13,7 +14,7 @@ export function LosslessBadge({ lossless }: { lossless: boolean }) {
       )}
     >
       <Icon aria-hidden="true" className="size-3.5" strokeWidth={2} />
-      {lossless ? 'Lossless' : 'Re-encodes'}
+      {lossless ? 'Lossless' : (label ?? 'Re-encodes')}
     </span>
   )
 }

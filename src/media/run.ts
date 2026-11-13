@@ -11,6 +11,7 @@ import {
 } from 'mediabunny'
 import { discardedSentence } from '@/lib/discarded'
 import type { Plan } from '@/lib/plan'
+import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
 import { FORMATS } from './probe'
 
@@ -25,7 +26,7 @@ export type RunResult = { size: number; buffer: ArrayBuffer | null }
 type Options = { onProgress?: (fraction: number) => void; signal?: AbortSignal }
 
 /** Runs a plan: every kept track copied as is (`copy: { mode: 'forced' }`, so nothing is ever quietly
- * re-encoded) into the plan's container. With a `writable` (a file the user chose) the output is
+ * re-encoded) into the plan's container, apart from audio the plan says to re-encode. With a `writable` (a file the user chose) the output is
  * streamed to it; without one it's built in memory and returned. A cancelled or failed job aborts the
  * writable, so a half-written file is discarded rather than saved. */
 export async function run(
@@ -55,17 +56,22 @@ export async function run(
   output = new Output({ format: outputFormat(plan.container, !!sink), target })
   const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
   const keep = (track: InputTrack) => (plan.keep.includes(track.id) ? {} : { discard: true })
+  const encode = plan.audio
 
   try {
+    if (encode) await ensureEncoder(encode.codec)
     if (signal?.aborted) throw new ConversionCanceledError()
     const conversion = await Conversion.init({
       input,
       output,
       video: keep,
-      audio: keep,
+      audio: encode
+        ? (track) => (plan.keep.includes(track.id) ? { ...encode, forceTranscode: true } : { discard: true })
+        : keep,
       // Some containers can't start before 0 (Ogg, with Opus's pre-roll at −7 ms), so copied media may
-      // be shifted; Mediabunny keeps every track in sync when it does.
-      copy: { mode: 'forced', shiftTolerance: Infinity },
+      // be shifted; Mediabunny keeps every track in sync when it does. Only a plan that re-encodes
+      // lets Mediabunny transcode; anything else is copied or refused.
+      copy: { mode: encode ? 'preferred' : 'forced', shiftTolerance: Infinity },
       showWarnings: false,
     })
 

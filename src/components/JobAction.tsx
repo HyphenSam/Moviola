@@ -37,9 +37,14 @@ export function JobAction({
         <Button variant="primary" disabled={!planned.plan} onClick={onStart}>
           {verb}
         </Button>
-        {planned.plan && <LosslessBadge lossless={planned.plan.lossless} />}
+        {planned.plan && <LosslessBadge lossless={planned.plan.lossless} label={planned.badge} />}
       </div>
       {planned.caption && <p className="text-xs text-ink-soft">{planned.caption}</p>}
+      {planned.hints?.map((h) => (
+        <p key={h} className="text-xs text-ink-soft">
+          {h}
+        </p>
+      ))}
       {hint && <p className="text-xs text-ink-soft">{hint}</p>}
     </div>
   )

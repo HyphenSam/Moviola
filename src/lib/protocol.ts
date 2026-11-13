@@ -1,3 +1,4 @@
+import type { Capabilities } from './capabilities'
 import type { MediaInfo } from './info'
 import type { Plan } from './plan'
 
@@ -12,6 +13,7 @@ export type RunResult = { size: number; blob: Blob | null }
 // which copies a handle to the file, not its bytes.
 export type Request =
   | { type: 'probe'; id: number; file: File }
+  | { type: 'capabilities'; id: number }
   | { type: 'run'; id: number; file: File; plan: Plan; target: TargetSpec }
   | { type: 'cancel'; id: number }
 
@@ -20,12 +22,16 @@ export type Reply =
   | { type: 'done'; id: number; value: unknown }
   | { type: 'failed'; id: number; message: string }
 
+export type WorkerCapabilities = Omit<Capabilities, 'saveToDisk'>
+
 /** A running job. Cancelling makes `result` reject once the worker has stopped. */
 export type Job = { result: Promise<RunResult>; cancel(): void }
 
 /** What the page asks of the worker. App takes one as a prop, so tests pass a fake. */
 export type WorkerClient = {
   probe(file: File): Promise<MediaInfo>
+  /** What this browser can encode; the page adds `saveToDisk`. */
+  capabilities(): Promise<WorkerCapabilities>
   run(file: File, plan: Plan, target: TargetSpec, onProgress?: (fraction: number | null) => void): Job
 }
 
@@ -64,6 +70,7 @@ export function createClient(port: Port): WorkerClient {
 
   return {
     probe: (file) => send<MediaInfo>({ type: 'probe', id: nextId++, file }),
+    capabilities: () => send<WorkerCapabilities>({ type: 'capabilities', id: nextId++ }),
     run: (file, plan, target, onProgress) => {
       const id = nextId++
       return {

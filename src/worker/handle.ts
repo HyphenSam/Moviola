@@ -1,4 +1,5 @@
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
+import { capabilities } from '@/media/encoders'
 import { probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
@@ -12,6 +13,9 @@ export async function handle(request: Request, post: (reply: Reply) => void): Pr
     switch (request.type) {
       case 'probe':
         post({ type: 'done', id: request.id, value: await probe(request.file) })
+        break
+      case 'capabilities':
+        post({ type: 'done', id: request.id, value: await capabilities() })
         break
       case 'cancel':
         running.get(request.id)?.abort()

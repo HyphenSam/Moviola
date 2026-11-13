@@ -1,9 +1,17 @@
 // Fakes for tests: the worker client, MediaInfo builders and the frame preview. Fakes over mocks
 // (CLAUDE.md): each behaves like the real thing in the ways the tests rely on.
 import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
+import type { Capabilities } from './capabilities'
 import type { AudioTrack, MediaInfo, VideoTrack } from './info'
 import type { Plan } from './plan'
-import type { RunResult, TargetSpec, WorkerClient } from './protocol'
+import type { RunResult, TargetSpec, WorkerCapabilities, WorkerClient } from './protocol'
+
+/** A browser that can encode everything and save to disk. Tests take away what they need missing. */
+export const ALL_CAPABLE: Capabilities = {
+  saveToDisk: true,
+  encodeVideo: { avc: true, hevc: true, vp9: true, av1: true },
+  encodeAudio: { aac: true, opus: true, mp3: true, flac: true },
+}
 
 export function fakeVideoTrack(over: Partial<VideoTrack> = {}): VideoTrack {
   return {
@@ -77,15 +85,18 @@ export type FakeJob = {
 }
 
 /** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe.
+ * It can encode what `capabilities` says: everything, unless told otherwise.
  * Runs wait in `jobs` until the test finishes or fails them; cancelling rejects as the worker does. */
 export function fakeClient(
   probe: (file: File) => MediaInfo | Promise<MediaInfo>,
+  capabilities: WorkerCapabilities = ALL_CAPABLE,
 ): WorkerClient & { probed: File[]; jobs: FakeJob[] } {
   const probed: File[] = []
   const jobs: FakeJob[] = []
   return {
     probed,
     jobs,
+    capabilities: async () => ({ encodeVideo: capabilities.encodeVideo, encodeAudio: capabilities.encodeAudio }),
     probe: async (file) => {
       probed.push(file)
       return probe(file)

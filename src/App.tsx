@@ -15,11 +15,13 @@ import { useInstallPrompt } from './hooks/useInstallPrompt'
 import { canSaveToDisk, useJob } from './hooks/useJob'
 import { useSource } from './hooks/useSource'
 import { APP_NAME } from './lib/brand'
+import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
 import type { Planned } from './lib/plan'
-import { defaultAudioTrack, planExtractAudio } from './lib/plans/extract-audio'
-import type { WorkerClient } from './lib/protocol'
+import { DEFAULT_EXTRACT_AUDIO, defaultAudioTrack, formatProblems, planExtractAudio } from './lib/plans/extract-audio'
+import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
+import { hasVideo } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
@@ -37,8 +39,15 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const job = useJob(client)
   // The chosen tool belongs to one file; a newly opened file starts on its default tool.
   const [choice, setChoice] = useState<{ sourceId: number; tool: ToolId } | null>(null)
-  // So does Extract audio's track.
+  // So does Extract audio's track; its format and options carry over to the next file.
   const [track, setTrack] = useState<{ sourceId: number; id: number } | null>(null)
+  const [audioSettings, setAudioSettings] = useState(DEFAULT_EXTRACT_AUDIO)
+  // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
+  const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {} })
+  useEffect(() => {
+    client.capabilities().then(setEncoders, () => {})
+  }, [client])
+  const capabilities: Capabilities = { saveToDisk: canSaveToDisk(), ...encoders }
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const install = useInstallPrompt()
@@ -62,8 +71,20 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
 
   const trackId =
     source && track?.sourceId === source.id ? track.id : ((source && defaultAudioTrack(source.info)?.id) ?? 0)
+  const problems = source ? formatProblems(source.info, trackId, capabilities) : null
+  // A format this track can't be converted to (or one that's waiting on the worker) falls back to
+  // Original rather than showing a disabled choice as chosen.
+  const extractSettings = {
+    ...audioSettings,
+    trackId,
+    format: problems?.[audioSettings.format] ? 'original' : audioSettings.format,
+  } as const
   const planned: Planned | null =
-    source && tool === 'extract-audio' ? planExtractAudio(source.info, { trackId }, CONTAINER_CODECS) : null
+    source && tool === 'extract-audio'
+      ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, capabilities)
+      : null
+  // An audio file is converted, not extracted from (SPEC.md section 6).
+  const converting = !!source && !hasVideo(source.info)
   const memoryHint =
     source && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
@@ -159,8 +180,12 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 ) : tool === 'extract-audio' ? (
                   <ExtractAudioView
                     info={source.info}
-                    trackId={trackId}
-                    onTrackChange={(id) => setTrack({ sourceId: source.id, id })}
+                    settings={extractSettings}
+                    problems={problems!}
+                    onChange={({ trackId: id, ...change }) => {
+                      if (id != null) setTrack({ sourceId: source.id, id })
+                      setAudioSettings((s) => ({ ...s, ...change }))
+                    }}
                   />
                 ) : (
                   <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>
@@ -182,10 +207,14 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             <div className="sticky bottom-0 border-t border-line bg-panel px-5 py-4">
               <JobAction
                 planned={planned}
-                verb="Extract"
+                verb={converting ? 'Convert' : 'Extract'}
                 running={job.running}
                 hint={memoryHint}
-                onStart={() => source && planned?.plan && void job.start(source.file, planned.plan, 'Extracting')}
+                onStart={() =>
+                  source &&
+                  planned?.plan &&
+                  void job.start(source.file, planned.plan, converting ? 'Converting' : 'Extracting')
+                }
                 onCancel={job.cancel}
               />
             </div>

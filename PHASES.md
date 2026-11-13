@@ -13,7 +13,7 @@ Have ffmpeg on your PATH (phase 1 uses it to make test files).
 | 1 | Scaffold, deploy, app shell | ☑ |
 | 2 | Open a file, Media info, player | ☑ |
 | 3 | Worker jobs, saving, Extract audio (lossless) | ☑ |
-| 4 | Extract audio: MP3, WAV, FLAC | ☐ |
+| 4 | Extract audio: MP3, WAV, FLAC | ☑ |
 | 5 | Timeline and Trim | ☐ |
 | 6 | Change container, Remove audio | ☐ |
 | 7 | Compress | ☐ |

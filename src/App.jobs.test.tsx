@@ -4,13 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { MediaInfo } from './lib/info'
-import { fakeAudioTrack, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
+import type { WorkerCapabilities } from './lib/protocol'
+import { fakeAudioInfo, fakeAudioTrack, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
 
 const video = (name = 'holiday.mp4') => new File([new Uint8Array(16)], name, { type: 'video/mp4' })
 
-/** Opens `info` (a 12.3 MB H.264 + AAC MP4 unless told otherwise) on Extract audio. */
-async function openOnExtract(info: MediaInfo = fakeInfo()) {
-  const client = fakeClient((file) => ({ ...info, name: file.name }))
+/** Opens `info` (a 12.3 MB H.264 + AAC MP4 unless told otherwise) on Extract audio, in a browser
+ * that can encode everything unless told otherwise. */
+async function openOnExtract(info: MediaInfo = fakeInfo(), capabilities?: WorkerCapabilities) {
+  const client = fakeClient((file) => ({ ...info, name: file.name }), capabilities)
   const user = userEvent.setup()
   render(<App webCodecs client={client} frames={fakeFrames()} />)
   await user.upload(screen.getByLabelText('Choose file'), video(info.name))
@@ -22,6 +24,10 @@ async function openOnExtract(info: MediaInfo = fakeInfo()) {
 }
 
 const extract = () => screen.getByRole('button', { name: 'Extract' })
+const formats = () => screen.getByRole('radiogroup', { name: 'Format' })
+const format = (name: string) => within(formats()).getByRole('radio', { name })
+const extractTool = () =>
+  within(screen.getByRole('radiogroup', { name: 'Tools' })).getByRole('radio', { name: 'Extract audio' })
 const exportsStrip = () => screen.getByRole('region', { name: 'Exports' })
 
 type Picker = (options: { suggestedName: string; types: unknown[] }) => Promise<FileSystemFileHandle>
@@ -70,6 +76,127 @@ describe('Extract audio', () => {
       screen.getByText('Moviola can’t tell which codec this audio track uses, so it can’t copy it.'),
     ).toBeInTheDocument()
     expect(extract()).toBeDisabled()
+  })
+
+  describe('formats', () => {
+    it('offers Original, MP3, WAV and FLAC, Original first', async () => {
+      await openOnExtract()
+      expect(
+        within(formats())
+          .getAllByRole('radio')
+          .map((r) => r.textContent),
+      ).toEqual(['Original', 'MP3', 'WAV', 'FLAC'])
+      expect(format('Original')).toBeChecked()
+      expect(screen.queryByRole('radiogroup', { name: 'Bitrate' })).not.toBeInTheDocument()
+    })
+
+    it('re-encodes to MP3 at the chosen bitrate, 192 kbps unless changed', async () => {
+      const { client, user } = await openOnExtract()
+      await user.click(format('MP3'))
+      const bitrate = screen.getByRole('radiogroup', { name: 'Bitrate' })
+      expect(within(bitrate).getByRole('radio', { name: '192 kbps' })).toBeChecked()
+      expect(screen.getByText('Re-encodes')).toBeInTheDocument()
+      expect(screen.getByText('AAC re-encoded to MP3 at 192 kbps.')).toBeInTheDocument()
+
+      await user.click(within(bitrate).getByRole('radio', { name: '320 kbps' }))
+      await user.click(extract())
+      expect(client.jobs[0].plan).toMatchObject({ name: 'holiday.mp3', audio: { codec: 'mp3', bitrate: 320_000 } })
+    })
+
+    it('hints that Original already keeps an MP3 without loss', async () => {
+      const { user } = await openOnExtract(
+        fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'mp3', codecString: 'mp3' })] }),
+      )
+      await user.click(format('MP3'))
+      expect(screen.getByText('Already MP3: Original keeps it without loss.')).toBeInTheDocument()
+    })
+
+    it('decodes to WAV at 16 or 24 bits, saying it can’t restore what AAC lost', async () => {
+      const { client, user } = await openOnExtract()
+      await user.click(format('WAV'))
+      const depth = screen.getByRole('radiogroup', { name: 'Bit depth' })
+      expect(within(depth).getByRole('radio', { name: '16-bit' })).toBeChecked()
+      expect(screen.getByText('Decodes to WAV')).toBeInTheDocument()
+      expect(screen.queryByText('Lossless')).not.toBeInTheDocument()
+      expect(
+        screen.getByText('WAV is uncompressed, but it can’t restore what the original codec already lost.'),
+      ).toBeInTheDocument()
+
+      await user.click(within(depth).getByRole('radio', { name: '24-bit' }))
+      await user.click(extract())
+      expect(client.jobs[0].plan).toMatchObject({ name: 'holiday.wav', audio: { codec: 'pcm-s24' } })
+    })
+
+    it('calls FLAC from PCM lossless', async () => {
+      const { user } = await openOnExtract(
+        fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'pcm-s16', codecString: 'pcm-s16' })] }),
+      )
+      await user.click(format('FLAC'))
+      expect(screen.getByText('Lossless')).toBeInTheDocument()
+      expect(screen.getByText('PCM 16-bit, compressed into FLAC. No quality is lost.')).toBeInTheDocument()
+    })
+
+    it('rules out converting a track this browser can’t decode, saying Original still works', async () => {
+      await openOnExtract(
+        fakeInfo({
+          name: 'h264-ac3.mkv',
+          tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'ac3', codecString: 'ac-3', canDecode: false })],
+        }),
+      )
+      for (const name of ['MP3', 'WAV', 'FLAC']) expect(format(name)).toBeDisabled()
+      expect(format('Original')).toBeEnabled()
+      expect(screen.getByText('This browser can’t decode AC-3. Original still works.')).toBeInTheDocument()
+      expect(extract()).toBeEnabled()
+    })
+
+    it('rules out MP3 and FLAC where there’s no encoder for them', async () => {
+      await openOnExtract(fakeInfo(), {
+        encodeVideo: {},
+        encodeAudio: { aac: true, opus: true, mp3: false, flac: false },
+      })
+      expect(await screen.findByText('This browser can’t encode MP3.')).toBeInTheDocument()
+      expect(screen.getByText('This browser can’t encode FLAC.')).toBeInTheDocument()
+      expect(format('MP3')).toBeDisabled()
+      expect(format('FLAC')).toBeDisabled()
+      expect(format('WAV')).toBeEnabled()
+    })
+
+    it('keeps the chosen format for the next file, and falls back to Original where it can’t be used', async () => {
+      const ac3 = fakeInfo({
+        tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: 'ac3', codecString: 'ac-3', canDecode: false })],
+      })
+      const client = fakeClient((file) =>
+        file.name === 'other.mkv' ? { ...ac3, name: file.name } : fakeInfo({ name: file.name }),
+      )
+      const user = userEvent.setup()
+      render(<App webCodecs client={client} frames={fakeFrames()} />)
+      await user.upload(screen.getByLabelText('Choose file'), video())
+      await screen.findByRole('region', { name: 'Open file' })
+      await user.click(extractTool())
+      await user.click(format('WAV'))
+
+      await user.upload(screen.getByLabelText('Choose file'), video('another.mp4'))
+      await waitFor(() => expect(client.probed).toHaveLength(2))
+      await user.click(extractTool())
+      expect(format('WAV')).toBeChecked()
+
+      await user.upload(screen.getByLabelText('Choose file'), video('other.mkv'))
+      await waitFor(() => expect(client.probed).toHaveLength(3))
+      await user.click(extractTool())
+      expect(format('Original')).toBeChecked()
+      expect(extract()).toBeEnabled()
+    })
+  })
+
+  it('calls it Convert for an audio file', async () => {
+    const client = fakeClient(() => fakeAudioInfo())
+    const user = userEvent.setup()
+    render(<App webCodecs client={client} frames={fakeFrames()} />)
+    await user.upload(screen.getByLabelText('Choose file'), new File(['x'], 'song.m4a'))
+    expect(await screen.findByRole('heading', { name: 'Convert audio' })).toBeInTheDocument()
+    await user.click(format('MP3'))
+    await user.click(screen.getByRole('button', { name: 'Convert' }))
+    expect(screen.getByRole('progressbar', { name: 'Converting song.mp3' })).toBeInTheDocument()
   })
 
   describe('without a save dialog (Firefox, Safari)', () => {

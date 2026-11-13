@@ -28,6 +28,16 @@ describe('createClient', () => {
     await expect(result).resolves.toBe(info)
   })
 
+  it('asks the worker what it can encode', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const result = client.capabilities()
+    expect(sent).toEqual([{ type: 'capabilities', id: 1 }])
+    const value = { encodeVideo: { avc: true }, encodeAudio: { mp3: true } }
+    reply({ type: 'done', id: 1, value })
+    await expect(result).resolves.toEqual(value)
+  })
+
   it('rejects with the worker’s message when it fails', async () => {
     const { port, reply } = fakePort()
     const client = createClient(port)

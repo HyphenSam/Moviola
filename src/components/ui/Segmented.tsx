@@ -12,7 +12,9 @@ export function Segmented<T extends string>({
 }: {
   label: string
   value: T
-  options: { value: T; label: string }[]
+  /** `name` is the accessible name when the visible label leans on the group's heading ("192" under
+   * "Bitrate (kbps)"). */
+  options: { value: T; label: string; name?: string; disabled?: boolean }[]
   onChange: (value: T) => void
   className?: string
   /** Each option as wide as its label instead of sharing the width. */
@@ -30,11 +32,13 @@ export function Segmented<T extends string>({
         <RadioGroup.Item
           key={option.value}
           value={option.value}
+          disabled={option.disabled}
+          aria-label={option.name}
           className={cn(
             fit ? 'px-3' : 'min-w-0 flex-1 truncate px-2',
             'h-7 rounded-[6px] text-[13px] font-medium text-ink-soft transition-colors duration-150',
             'hover:text-ink data-[state=checked]:bg-panel data-[state=checked]:text-ink data-[state=checked]:shadow-[0_1px_2px_oklch(0_0_0/0.12),0_0_0_0.5px_var(--color-line-strong)]',
-            'focus-visible:outline-offset-0',
+            'focus-visible:outline-offset-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-ink-soft',
           )}
         >
           {option.label}

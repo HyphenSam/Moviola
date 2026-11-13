@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@mediabunny/aac-encoder':
+        specifier: 1.65.2
+        version: 1.65.2(mediabunny@1.65.2)
+      '@mediabunny/flac-encoder':
+        specifier: 1.65.2
+        version: 1.65.2(mediabunny@1.65.2)
+      '@mediabunny/mp3-encoder':
+        specifier: 1.65.2
+        version: 1.65.2(mediabunny@1.65.2)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -1020,6 +1029,21 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@mediabunny/aac-encoder@1.65.2':
+    resolution: {integrity: sha512-HsDmtqRf26PwSDl1IYCPz5hHtj3js5u6O1VGdOIPKrln5E0slaPyGue84CWpbbeJ54wrLDJdd/esp17Ot+xh3A==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
+  '@mediabunny/flac-encoder@1.65.2':
+    resolution: {integrity: sha512-EcrtSDTmlImyaKarunE4xytrMueOuiSRg/QBHEVY7XUcIgO9oXLguHxRWnglv7Q7CMloDbcXZTMMlN8CUNziFg==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
+  '@mediabunny/mp3-encoder@1.65.2':
+    resolution: {integrity: sha512-iuGMybEg07MH7EnDhRXJ0hH80cSJ8ftri+HbTnrE8k/YUu5AcP5l7ZTANh2ZORSsXbWYj/Hu8U/mI8Ctdzb9Rw==}
+    peerDependencies:
+      mediabunny: ^1.0.0
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -4770,6 +4794,18 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mediabunny/aac-encoder@1.65.2(mediabunny@1.65.2)':
+    dependencies:
+      mediabunny: 1.65.2
+
+  '@mediabunny/flac-encoder@1.65.2(mediabunny@1.65.2)':
+    dependencies:
+      mediabunny: 1.65.2
+
+  '@mediabunny/mp3-encoder@1.65.2(mediabunny@1.65.2)':
+    dependencies:
+      mediabunny: 1.65.2
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@2.0.0-beta.2)(@emnapi/runtime@2.0.0-beta.2)':
     dependencies:

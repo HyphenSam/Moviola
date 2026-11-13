@@ -2,19 +2,21 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BlobSource, EncodedPacketSink, Input, ALL_FORMATS } from 'mediabunny'
 import { describe, expect, it } from 'vitest'
-import type { MediaInfo } from '@/lib/info'
-import { planExtractAudio } from '@/lib/plans/extract-audio'
+import type { AudioTrack, MediaInfo } from '@/lib/info'
+import { DEFAULT_EXTRACT_AUDIO, planExtractAudio, type ExtractAudioSettings } from '@/lib/plans/extract-audio'
 import type { Plan } from '@/lib/plan'
+import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
 import { probe } from './probe'
 import { CANCELLED, run } from './run'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
-async function extract(name: string, trackId: number | null = null) {
+async function extract(name: string, trackId: number | null = null, over: Partial<ExtractAudioSettings> = {}) {
   const source = fixture(name)
   const info = await probe(source)
-  const { plan, problems } = planExtractAudio(info, { trackId }, CONTAINER_CODECS)
+  const settings = { ...DEFAULT_EXTRACT_AUDIO, trackId, ...over }
+  const { plan, problems } = planExtractAudio(info, settings, CONTAINER_CODECS, ALL_CAPABLE)
   if (!plan) throw new Error(problems.join(' '))
   const result = await run(source, plan, null)
   const output = new File([result.buffer!], plan.name)
@@ -82,6 +84,41 @@ describe('extract audio, Original', () => {
   })
 })
 
+// MP3, WAV and FLAC re-encode, which needs the source decoded. Node has no WebCodecs, but Mediabunny
+// decodes PCM itself and the MP3 and FLAC add-ons are WebAssembly, so the PCM fixture runs end to
+// end here. Other sources are checked by hand in the browser.
+describe('extract audio, converted', () => {
+  it.each([
+    [{ format: 'wav', wavBits: 16 }, 'h264-pcm.wav', 'wav', 'pcm-s16'],
+    [{ format: 'wav', wavBits: 24 }, 'h264-pcm.wav', 'wav', 'pcm-s24'],
+    [{ format: 'flac' }, 'h264-pcm.flac', 'flac', 'flac'],
+    [{ format: 'mp3', mp3Bitrate: 128 }, 'h264-pcm.mp3', 'mp3', 'mp3'],
+  ] as const)('h264-pcm.mov as %o → %s', async (over, outName, container, codec) => {
+    const { info, plan, output, outInfo } = await extract('h264-pcm.mov', null, over)
+    expect(plan.name).toBe(outName)
+    expect(outInfo.container).toBe(container)
+    expect(outInfo.tracks).toHaveLength(1)
+    const [source, out] = [info, outInfo].map((i) => i.tracks.find((t) => t.kind === 'audio')!) as AudioTrack[]
+    expect(out.codec).toBe(codec)
+    // MP3 resamples 16 kHz to 48 kHz to reach its full bitrate range; the rest keep the rate.
+    expect([out.sampleRate, out.channels]).toEqual([plan.audio?.sampleRate ?? source.sampleRate, source.channels])
+    expect(outInfo.duration).toBeCloseTo(info.duration, 1)
+    expect(output.size).toBeGreaterThan(1000)
+  })
+
+  it('writes 16-bit WAV from 16-bit PCM sample for sample', async () => {
+    const { source, info, output, outInfo } = await extract('h264-pcm.mov', null, { format: 'wav' })
+    const original = await packetBytes(source, audioId(info))
+    expect(Buffer.from(await packetBytes(output, audioId(outInfo))).equals(original)).toBe(true)
+  })
+
+  it.each([128, 192, 256, 320] as const)('writes MP3 at %i kbps', async (kbps) => {
+    const { outInfo } = await extract('h264-pcm.mov', null, { format: 'mp3', mp3Bitrate: kbps })
+    const bitrate = outInfo.tracks[0].bitrate!
+    expect(Math.abs(bitrate - kbps * 1000) / (kbps * 1000)).toBeLessThan(0.03)
+  })
+})
+
 /** A WritableStream that keeps what's written, like a FileSystemWritableFileStream: positioned
  * writes, and either close (commit) or abort (discard). */
 function fakeFileStream() {
@@ -104,7 +141,10 @@ function fakeFileStream() {
 
 const m4aPlan = async (name = 'h264-aac.mp4') => {
   const source = fixture(name)
-  return { source, plan: planExtractAudio(await probe(source), { trackId: null }, CONTAINER_CODECS).plan! }
+  return {
+    source,
+    plan: planExtractAudio(await probe(source), DEFAULT_EXTRACT_AUDIO, CONTAINER_CODECS, ALL_CAPABLE).plan!,
+  }
 }
 
 describe('run', () => {
