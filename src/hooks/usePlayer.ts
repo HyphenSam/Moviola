@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { readVolume, writeVolume } from '@/lib/settings'
+import { readMuted, readVolume, writeMuted, writeVolume } from '@/lib/settings'
 
 /** `localStorage`, or null where reading the property itself throws (blocked site data). */
 function storage() {
@@ -18,7 +18,11 @@ export type Backend = { play(): void; pause(): void; seek(time: number): void }
 export function usePlayer(duration: number, frameRate: number | null) {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [muted, setMuted] = useState(false)
+  const [muted, setMutedState] = useState(() => readMuted(storage()))
+  const setMuted = useCallback((m: boolean) => {
+    setMutedState(m)
+    writeMuted(storage(), m)
+  }, [])
   const [volume, setVolumeState] = useState(() => readVolume(storage()))
   const setVolume = useCallback((v: number) => {
     setVolumeState(v)

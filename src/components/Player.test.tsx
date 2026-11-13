@@ -75,6 +75,16 @@ describe('Player', () => {
     expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.8')
   })
 
+  it('remembers mute for the next file and the next visit', async () => {
+    const first = setup()
+    expect(first.media()!.muted).toBe(false)
+    await first.user.click(screen.getByRole('button', { name: 'Mute' }))
+    first.view.unmount()
+    const { media } = setup()
+    expect(media()!.muted).toBe(true)
+    expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument()
+  })
+
   it('answers the keyboard: Space, arrows, Shift+arrows, Home and End', async () => {
     const { media, user } = setup()
     await user.keyboard(' ')

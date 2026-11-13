@@ -94,8 +94,8 @@ a normal machine.
 
 ### Transport
 Play/pause, position / duration timecode, frame back / forward, mute and volume. The volume
-starts at half and is remembered across visits (`localStorage`; if storage is blocked it just
-starts at half).
+starts at half, unmuted. Volume and mute are remembered across visits (`localStorage`; if
+storage is blocked they just start at their defaults).
 
 ### Timeline
 - A strip of thumbnails generated with `CanvasSink` (`frames.ts`) at evenly spaced timestamps, as

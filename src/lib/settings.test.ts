@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readVolume, writeVolume } from './settings'
+import { readMuted, readVolume, writeMuted, writeVolume } from './settings'
 
 /** Storage backed by a Map, like localStorage in the ways these functions use it. */
 function fakeStorage() {
@@ -45,5 +45,26 @@ describe('volume', () => {
     expect(readVolume(broken)).toBe(0.5)
     expect(() => writeVolume(broken, 0.3)).not.toThrow()
     expect(() => writeVolume(null, 0.3)).not.toThrow()
+  })
+})
+
+describe('muted', () => {
+  it('is off by default', () => {
+    expect(readMuted(fakeStorage())).toBe(false)
+  })
+
+  it('reads back what was written', () => {
+    const storage = fakeStorage()
+    writeMuted(storage, true)
+    expect(readMuted(storage)).toBe(true)
+    writeMuted(storage, false)
+    expect(readMuted(storage)).toBe(false)
+  })
+
+  it('works without storage, or when the browser blocks it', () => {
+    expect(readMuted(null)).toBe(false)
+    expect(readMuted(broken)).toBe(false)
+    expect(() => writeMuted(broken, true)).not.toThrow()
+    expect(() => writeMuted(null, true)).not.toThrow()
   })
 })
