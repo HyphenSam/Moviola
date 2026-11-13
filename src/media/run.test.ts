@@ -1,14 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BlobSource, EncodedPacketSink, Input, ALL_FORMATS } from 'mediabunny'
+import { BlobSource, EncodedPacketSink, Input, ALL_FORMATS, Quality } from 'mediabunny'
 import { describe, expect, it } from 'vitest'
 import type { AudioTrack, MediaInfo } from '@/lib/info'
 import { DEFAULT_EXTRACT_AUDIO, planExtractAudio, type ExtractAudioSettings } from '@/lib/plans/extract-audio'
 import type { Plan } from '@/lib/plan'
+import { planTrim, type TimeRange, type TrimMode } from '@/lib/plans/trim'
 import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
 import { probe } from './probe'
-import { CANCELLED, floatToInt, run } from './run'
+import { CANCELLED, floatToInt, run, videoOptions } from './run'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -299,5 +300,128 @@ describe('run', () => {
       'WebM can’t hold this H.264 video without re-encoding it.',
     )
     expect(stream.state).toEqual({ closed: false, aborted: true })
+  })
+})
+
+type Packet = { timestamp: number; data: Buffer }
+
+/** A track's packets in decode order, with their timestamps. */
+async function packets(file: File, trackId: number): Promise<Packet[]> {
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
+  try {
+    const track = (await input.getTracks()).find((t) => t.id === trackId)!
+    const list: Packet[] = []
+    for await (const p of new EncodedPacketSink(track).packets()) {
+      list.push({ timestamp: p.timestamp, data: Buffer.from(withoutAdts(p.data)) })
+    }
+    return list
+  } finally {
+    input.dispose()
+  }
+}
+
+const trackOf = (info: MediaInfo, kind: 'video' | 'audio') => info.tracks.find((t) => t.kind === kind)!.id
+
+/** Where `part` sits inside `whole`, packet for packet and byte for byte, or -1. */
+function runOf(whole: Packet[], part: Packet[]): number {
+  const at = whole.findIndex((p) => p.data.equals(part[0].data))
+  const same = at >= 0 && part.every((p, i) => whole[at + i]?.data.equals(p.data))
+  return same ? at : -1
+}
+
+async function trim(name: string, range: TimeRange, mode: TrimMode = 'fast') {
+  const source = fixture(name)
+  const info = await probe(source)
+  const { plan, problems } = planTrim(info, range, mode, CONTAINER_CODECS, ALL_CAPABLE)
+  if (!plan) throw new Error(problems.join(' '))
+  const result = await run(source, plan, null)
+  const output = new File([result.buffer!], plan.name)
+  return { source, info, plan, output, outInfo: await probe(output) }
+}
+
+// SPEC.md 6.3's Fast trim, end to end: everything is copied, so it runs in Node.
+describe('trim, Fast', () => {
+  it('cuts h264-aac.mp4 from 3.0 s at the 2.0 s keyframe, keeping every packet to the out point', async () => {
+    const { source, info, plan, output, outInfo } = await trim('h264-aac.mp4', { start: 3, end: 3.8 })
+    expect(plan).toMatchObject({ name: 'h264-aac (trimmed).mp4', container: 'mp4', lossless: true })
+    expect(outInfo.container).toBe('mp4')
+    expect(outInfo.tracks.map((t) => [t.kind, t.codec])).toEqual([
+      ['video', 'avc'],
+      ['audio', 'aac'],
+    ])
+
+    // Video: the source's packets from the 2.0 s keyframe up to the out point, byte for byte, starting
+    // at the output's 0.
+    const sourceVideo = await packets(source, trackOf(info, 'video'))
+    const outVideo = await packets(output, trackOf(outInfo, 'video'))
+    const expected = sourceVideo.filter((p) => p.timestamp >= 2 - 1e-6 && p.timestamp < 3.8 - 1e-6)
+    expect(outVideo.length).toBe(expected.length)
+    expect(outVideo.every((p, i) => p.data.equals(expected[i].data))).toBe(true)
+    expect(Math.min(...outVideo.map((p) => p.timestamp))).toBeCloseTo(0, 3)
+
+    // Audio: an unbroken run of the source's packets from the keyframe on, still in sync with the picture.
+    const sourceAudio = await packets(source, trackOf(info, 'audio'))
+    const outAudio = await packets(output, trackOf(outInfo, 'audio'))
+    const at = runOf(sourceAudio, outAudio)
+    expect(at).toBeGreaterThan(0)
+    expect(sourceAudio[at].timestamp).toBeLessThanOrEqual(2)
+    expect(sourceAudio[at].timestamp).toBeGreaterThan(2 - 0.1)
+    expect(outAudio[0].timestamp).toBeCloseTo(sourceAudio[at].timestamp - 2, 3)
+    expect(sourceAudio[at + outAudio.length - 1].timestamp).toBeLessThan(3.8)
+
+    // From the keyframe to the out point.
+    expect(outInfo.duration).toBeCloseTo(1.8, 1)
+  })
+
+  it('cuts a late-starting MPEG-TS on the playhead’s clock and keeps it MPEG-TS', async () => {
+    const { info, output, outInfo } = await trim('h264-aac.ts', { start: 3, end: 3.8 })
+    expect(info.start).toBeGreaterThan(1)
+    expect(output.name).toBe('h264-aac (trimmed).ts')
+    expect(outInfo.container).toBe('mpegts')
+    // From the keyframe 2 s into the video (which starts a frame after the file does), plus the few
+    // packets of AAC pre-roll before it: MPEG-TS can't hold them at negative times, so they're shifted in.
+    expect(outInfo.duration).toBeGreaterThan(3.8 - 2.02 - 0.01)
+    expect(outInfo.duration).toBeLessThan(3.8 - 2.02 + 0.1)
+  })
+
+  it.each([
+    ['aac.m4a', 'aac (trimmed).m4a', 'mp4', 'aac'],
+    ['flac.flac', 'flac (trimmed).flac', 'flac', 'flac'],
+    ['pcm-51.wav', 'pcm-51 (trimmed).wav', 'wav', 'pcm-s16'],
+    ['opus-51.webm', 'opus-51 (trimmed).webm', 'webm', 'opus'],
+  ] as const)('cuts the audio file %s to the range, copied', async (name, outName, container, codec) => {
+    const range = { start: 0.25, end: 0.75 }
+    const { source, info, output, outInfo } = await trim(name, range)
+    expect(output.name).toBe(outName)
+    expect(outInfo.container).toBe(container)
+    expect(outInfo.tracks.map((t) => [t.kind, t.codec])).toEqual([['audio', codec]])
+    // Copying cuts between packets (96 ms of FLAC, 128 ms of the WAV), and Opus brings its pre-roll,
+    // so the result covers the range with a little to spare.
+    expect(outInfo.duration).toBeGreaterThanOrEqual(0.5 - 0.01)
+    expect(outInfo.duration).toBeLessThan(0.5 + 0.3)
+    const original = await packets(source, trackOf(info, 'audio'))
+    const out = await packets(output, trackOf(outInfo, 'audio'))
+    expect(runOf(original, out)).toBeGreaterThanOrEqual(0)
+  })
+})
+
+// Precise trim re-encodes video, which needs WebCodecs; the encoder settings are checked here and the
+// result by hand in the browser.
+describe('videoOptions', () => {
+  it('re-encodes to the plan’s codec at the source’s bitrate, as a bitrate rather than a quality level', () => {
+    expect(videoOptions({ codec: 'avc', bitrate: 4_000_000 })).toEqual({
+      codec: 'avc',
+      quality: new Quality({ bitrate: 4_000_000 }),
+      forceTranscode: true,
+      hardwareAcceleration: 'no-preference',
+    })
+  })
+
+  it('leaves the quality to the encoder when the source’s bitrate isn’t known', () => {
+    expect(videoOptions({ codec: 'vp9' })).toEqual({
+      codec: 'vp9',
+      forceTranscode: true,
+      hardwareAcceleration: 'no-preference',
+    })
   })
 })

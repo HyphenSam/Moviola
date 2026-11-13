@@ -15,3 +15,32 @@ export function formatTimecode(seconds: number, { hours = false }: { hours?: boo
   const tail = `${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
   return h > 0 || hours ? `${h}:${String(m).padStart(2, '0')}:${tail}` : `${m}:${tail}`
 }
+
+// `90`, `1:30`, `1:30.5`, `0:01:30.500`: up to two whole-number parts, then seconds with an optional
+// fraction.
+const TIMECODE = /^(?:(\d+):)?(?:(\d+):)?(\d+(?:\.\d*)?|\.\d+)$/
+
+/** A time typed into a timecode field, in seconds rounded to the millisecond, or null if it isn't
+ * one. Seconds can run past 59 only on their own (`90`); after minutes they can't, nor minutes past
+ * 59 after hours. */
+export function parseTimecode(text: string): number | null {
+  const match = TIMECODE.exec(text.trim())
+  if (!match) return null
+  const [, first, second, secondsText] = match
+  const [hours, minutes] = second !== undefined ? [Number(first), Number(second)] : [0, Number(first ?? 0)]
+  const seconds = Number(secondsText)
+  if ((first !== undefined && seconds >= 60) || (second !== undefined && minutes >= 60)) return null
+  return Math.round((hours * 3600 + minutes * 60 + seconds) * 1000) / 1000
+}
+
+/** How long a frame lasts; 30 fps when the rate is unknown. */
+export const frameDuration = (frameRate: number | null) => 1 / (frameRate ?? 30)
+
+/** The time `frames` frames on (or back) from the frame showing at `time`, on the frame grid. A
+ * time inside a frame belongs to that frame; the small allowance keeps a boundary computed a hair
+ * short (0.12 × 25 = 2.9999…) on its own frame. */
+export function stepFrames(time: number, frames: number, frameRate: number | null): number {
+  const rate = frameRate ?? 30
+  const showing = Math.floor(time * rate + 1e-6)
+  return Math.max(0, showing + frames) / rate
+}

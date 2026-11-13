@@ -1,6 +1,6 @@
 import { AudioLines, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { usePlayer, type PlayerControls } from '@/hooks/usePlayer'
+import type { PlayerControls } from '@/hooks/usePlayer'
 import { videoTrack, type MediaInfo } from '@/lib/info'
 import { shortcutFor } from '@/lib/shortcuts'
 import { formatDuration } from '@/lib/timecode'
@@ -12,11 +12,24 @@ const PREVIEW_BOX = { width: 1280, height: 720 }
 
 /** Shows the open file (SPEC.md section 5). Native playback first, since it brings sound and smooth
  * seeking; if the browser can't play the file, decoded frames without sound; if it can't decode the
- * video either, a sentence saying so. Render it with a `key` per file so each file starts afresh. */
-export function Player({ file, info, frames }: { file: File; info: MediaInfo; frames: OpenFrames }) {
+ * video either, a sentence saying so. Render it with a `key` per file so each file starts afresh.
+ * The player state comes from above (`usePlayer`), where the tools share the playhead; `onMark` sets
+ * the range's in or out point at the playhead (I and O). */
+export function Player({
+  file,
+  info,
+  frames,
+  player,
+  onMark,
+}: {
+  file: File
+  info: MediaInfo
+  frames: OpenFrames
+  player: PlayerControls
+  onMark: (end: 'in' | 'out', time: number) => void
+}) {
   const video = videoTrack(info)
   const [mode, setMode] = useState<'native' | 'frames' | 'none'>('native')
-  const player = usePlayer(info.duration, video?.frameRate ?? null)
   const { report } = player
 
   useEffect(() => {
@@ -24,15 +37,19 @@ export function Player({ file, info, frames }: { file: File; info: MediaInfo; fr
       const { key, shiftKey, ctrlKey, metaKey, altKey } = e
       const target = e.target instanceof HTMLElement ? e.target : null
       const shortcut = shortcutFor({ key, shiftKey, ctrlKey, metaKey, altKey, target })
-      if (!shortcut || mode === 'none') return
+      if (!shortcut) return
       e.preventDefault()
+      // Without a picture there's nothing to play, but the playhead still moves along the timeline
+      // and marks the range for the copying tools.
       if (shortcut.type === 'toggle') player.toggle()
       else if (shortcut.type === 'nudge') player.nudge(shortcut.seconds)
+      else if (shortcut.type === 'step') player.step(shortcut.frames)
+      else if (shortcut.type === 'mark') onMark(shortcut.end, player.now.current.time)
       else player.seek(shortcut.type === 'start' ? 0 : info.duration)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [player, mode, info.duration])
+  }, [player, info.duration, onMark])
 
   function unsupported() {
     report.playing(false)

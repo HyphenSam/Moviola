@@ -1,3 +1,4 @@
+import type { VideoEncodeCodec } from './capabilities'
 import type { OutputContainer } from './containers'
 
 /** The codecs Extract audio converts to. PCM is written by Mediabunny itself; MP3 and FLAC may need
@@ -19,6 +20,12 @@ export type Plan = {
   lossless: boolean
   /** The source track ids to keep; every other track is left out. */
   keep: number[]
+  /** Cut to this range, in the source's own timestamps (MediaInfo `start` added). Copied video starts
+   * on the keyframe at or before `start`. */
+  trim?: { start: number; end: number }
+  /** Re-encode the kept video to this codec, at this bitrate (or the encoder's choice); without it,
+   * video is copied. */
+  video?: { codec: VideoEncodeCodec; bitrate?: number }
   /** Re-encode the kept audio to this codec; without it, audio is copied. The source's sample rate
    * and channels are kept unless `sampleRate` or `numberOfChannels` say otherwise. */
   audio?: {

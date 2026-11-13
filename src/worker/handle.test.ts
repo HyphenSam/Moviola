@@ -40,6 +40,47 @@ describe('worker handle', () => {
     ])
   })
 
+  it.each([
+    [3, 2],
+    [2, 2],
+    [1.99, 0],
+    [0, 0],
+    [3.96, 2],
+  ])('answers a keyframe request at %s s in h264-aac.mp4 with the keyframe at %s s', async (time, keyframe) => {
+    const replies: Reply[] = []
+    await handle({ type: 'keyframe', id: 9, file: fixture('h264-aac.mp4'), trackId: 1, time }, (r) => replies.push(r))
+    expect(replies).toEqual([{ type: 'done', id: 9, value: keyframe }])
+  })
+
+  it('counts keyframe times from the playhead’s 0 when the file starts late (MPEG-TS)', async () => {
+    const replies: Reply[] = []
+    const file = fixture('h264-aac.ts')
+    await handle({ type: 'keyframe', id: 10, file, trackId: 256, time: 3 }, (r) => replies.push(r))
+    const value = (replies[0] as { value: number }).value
+    // The keyframes are 2 s apart from the first frame, which can sit a little after the start.
+    expect(value).toBeGreaterThanOrEqual(2)
+    expect(value).toBeLessThan(2.1)
+  })
+
+  it('answers a keyframe request for a track that isn’t there with null', async () => {
+    const replies: Reply[] = []
+    await handle({ type: 'keyframe', id: 11, file: fixture('h264-aac.mp4'), trackId: 99, time: 3 }, (r) =>
+      replies.push(r),
+    )
+    expect(replies).toEqual([{ type: 'done', id: 11, value: null }])
+  })
+
+  it.each(['aac.m4a', 'h264-aac.mp4'])(
+    'answers thumbnails with none when there’s no video it can decode (%s; Node has no decoder)',
+    async (name) => {
+      const replies: Reply[] = []
+      await handle({ type: 'thumbnails', id: 12, file: fixture(name), times: [0.5, 1.5], height: 48 }, (r) =>
+        replies.push(r),
+      )
+      expect(replies).toEqual([{ type: 'done', id: 12, value: [] }])
+    },
+  )
+
   it('ignores a cancel for a job that isn’t running', async () => {
     const replies: Reply[] = []
     await handle({ type: 'cancel', id: 99 }, (reply) => replies.push(reply))

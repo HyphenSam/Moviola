@@ -14,6 +14,8 @@ export type RunResult = { size: number; blob: Blob | null }
 export type Request =
   | { type: 'probe'; id: number; file: File }
   | { type: 'capabilities'; id: number }
+  | { type: 'keyframe'; id: number; file: File; trackId: number; time: number }
+  | { type: 'thumbnails'; id: number; file: File; times: number[]; height: number }
   | { type: 'run'; id: number; file: File; plan: Plan; target: TargetSpec }
   | { type: 'cancel'; id: number }
 
@@ -32,6 +34,12 @@ export type WorkerClient = {
   probe(file: File): Promise<MediaInfo>
   /** What this browser can encode; the page adds `saveToDisk`. */
   capabilities(): Promise<WorkerCapabilities>
+  /** The time of the keyframe at or before `time` in a video track, or null if there's none. Times
+   * count from the playhead's 0 (MediaInfo `start`). */
+  keyframe(file: File, trackId: number, time: number): Promise<number | null>
+  /** Frames of the primary video track at `times`, `height` pixels high, rotation applied; null for
+   * a frame that couldn't be decoded, and none at all when the video can't be. */
+  thumbnails(file: File, times: number[], height: number): Promise<(ImageBitmap | null)[]>
   run(file: File, plan: Plan, target: TargetSpec, onProgress?: (fraction: number | null) => void): Job
 }
 
@@ -71,6 +79,9 @@ export function createClient(port: Port): WorkerClient {
   return {
     probe: (file) => send<MediaInfo>({ type: 'probe', id: nextId++, file }),
     capabilities: () => send<WorkerCapabilities>({ type: 'capabilities', id: nextId++ }),
+    keyframe: (file, trackId, time) => send<number | null>({ type: 'keyframe', id: nextId++, file, trackId, time }),
+    thumbnails: (file, times, height) =>
+      send<(ImageBitmap | null)[]>({ type: 'thumbnails', id: nextId++, file, times, height }),
     run: (file, plan, target, onProgress) => {
       const id = nextId++
       return {

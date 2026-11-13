@@ -1,5 +1,5 @@
 import { ALL_FORMATS, BlobSource, CanvasSink, Input, type WrappedCanvas } from 'mediabunny'
-import { firstTimestamp } from './probe'
+import { firstTimestamp, FORMATS } from './probe'
 
 /** A decoded frame, ready to draw. */
 export type Frame = {
@@ -56,5 +56,26 @@ export const openFrames: OpenFrames = (file, box) => {
       for await (const c of r.sink.canvases(r.at(time))) yield frame(c, r.start)
     },
     dispose: () => input.dispose(),
+  }
+}
+
+/** The timeline's thumbnails: frames of the primary video track at `times` (counted from the playhead's
+ * 0), `height` pixels high with rotation applied, as bitmaps that can be sent to the page. None when
+ * there's no video this browser can decode; null for a single frame that couldn't be had. */
+export async function thumbnails(file: File, times: number[], height: number): Promise<(ImageBitmap | null)[]> {
+  const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track || !(await track.canDecode())) return []
+    const [start, first] = await Promise.all([firstTimestamp(input), track.getFirstTimestamp()])
+    const sink = new CanvasSink(track, { height: Math.round(height) })
+    const images: (ImageBitmap | null)[] = []
+    // Before the first picture (audio can start a little earlier), show the first picture.
+    for await (const c of sink.canvasesAtTimestamps(times.map((t) => Math.max(t + start, first)))) {
+      images.push(c ? await createImageBitmap(c.canvas) : null)
+    }
+    return images
+  } finally {
+    input.dispose()
   }
 }

@@ -204,7 +204,9 @@ Cuts out a range.
   planner gets that keyframe's time (from `EncodedPacketSink.getKeyPacket`, looked up in the worker
   when the in point changes, debounced) and the view says, when it differs by more than a frame:
   "Starts at 0:12.000, the nearest keyframe, 0.48 s before your in point." The timeline shows the
-  real cut as a dashed marker. Badge: Lossless.
+  real cut as a dashed marker. `run.ts` moves the trim's start back to that same keyframe (verified
+  from the bitstream) before converting, so every track starts there in every container; left to
+  Mediabunny, MP4 would keep the in point and hide the lead-in behind an edit list. Badge: Lossless.
 - **Precise**: re-encodes the video (`copy: false` for video) so the cut lands on the exact frame;
   audio is copied. The encoder is the source codec if the browser can encode it, else H.264; the
   bitrate matches the source video's measured bitrate so quality stays close. If the browser can't
@@ -213,6 +215,9 @@ Cuts out a range.
 - Output container: the source's, when Mediabunny can write it; MPEG-TS stays MPEG-TS; otherwise
   MKV. Precise trim with a fallback codec that the source container can't hold uses MP4.
 - Works for audio-only files too (Fast is always exact enough for audio; hide the mode control).
+  Copies cut between packets, so the result can run a packet over at each end (96 ms for FLAC, more
+  for PCM in WAV) plus the codec's pre-roll.
+- A track whose codec Mediabunny can't name is left out, with a hint saying so.
 - Output name: `<stem> (trimmed).<ext>`.
 - Problems: out not after in; range shorter than one frame.
 

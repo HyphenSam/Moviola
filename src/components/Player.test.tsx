@@ -1,18 +1,32 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
-import type { MediaInfo } from '@/lib/info'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { usePlayer } from '@/hooks/usePlayer'
+import { videoTrack, type MediaInfo } from '@/lib/info'
+import type { OpenFrames } from '@/media/frames'
 import { fakeAudioInfo, fakeFrames, fakeInfo, fakeVideoTrack } from '@/lib/testing'
 import { Player } from './Player'
+
+/** The player state lives above the Player (App shares the playhead with the tools), as here. */
+function Harness(props: {
+  file: File
+  info: MediaInfo
+  frames: OpenFrames
+  onMark: (end: 'in' | 'out', time: number) => void
+}) {
+  const player = usePlayer(props.file, props.info.duration, videoTrack(props.info)?.frameRate ?? null)
+  return <Player {...props} player={player} />
+}
 
 function setup(info: MediaInfo = fakeInfo()) {
   const frames = fakeFrames()
   const file = new File(['x'], info.name)
   const user = userEvent.setup()
-  const view = render(<Player file={file} info={info} frames={frames} />)
+  const onMark = vi.fn()
+  const view = render(<Harness file={file} info={info} frames={frames} onMark={onMark} />)
   const media = () => view.container.querySelector<HTMLMediaElement>('video, audio')
-  return { frames, file, user, media, view }
+  return { frames, file, user, media, view, onMark }
 }
 
 const position = () => screen.getByLabelText('Position')
@@ -102,6 +116,32 @@ describe('Player', () => {
     expect(media()!.currentTime).toBe(0)
     await user.keyboard('{ArrowLeft}')
     expect(media()!.currentTime).toBe(0)
+  })
+
+  it('steps a frame back and forward with comma and full stop, pausing first', async () => {
+    const { media, user } = setup()
+    await user.keyboard(' ')
+    await user.keyboard('..')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+    expect(media()!.currentTime).toBeCloseTo(0.08)
+    await user.keyboard(',')
+    expect(media()!.currentTime).toBeCloseTo(0.04)
+  })
+
+  it('marks the in and out points at the playhead with I and O', async () => {
+    const { user, onMark } = setup()
+    await user.keyboard('{ArrowRight}{ArrowRight}i')
+    expect(onMark).toHaveBeenLastCalledWith('in', 2)
+    await user.keyboard('{ArrowRight}o')
+    expect(onMark).toHaveBeenLastCalledWith('out', 3)
+  })
+
+  it('still moves the playhead and marks the range when the video can’t be shown, for the copying tools', async () => {
+    const { media, user, onMark } = setup(fakeInfo({ tracks: [fakeVideoTrack({ codec: 'hevc', canDecode: false })] }))
+    fireEvent(media()!, new Event('error'))
+    await screen.findByText('This browser can’t show this video, but copying tools still work.')
+    await user.keyboard('{ArrowRight}o')
+    expect(onMark).toHaveBeenLastCalledWith('out', 1)
   })
 
   it('falls back to decoded frames without sound when the browser can’t play the file', async () => {

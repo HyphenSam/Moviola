@@ -38,6 +38,26 @@ describe('createClient', () => {
     await expect(result).resolves.toEqual(value)
   })
 
+  it('asks for the keyframe at or before a time in a track, and resolves with its time', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const file = new File(['x'], 'a.mp4')
+    const result = client.keyframe(file, 1, 3)
+    expect(sent).toEqual([{ type: 'keyframe', id: 1, file, trackId: 1, time: 3 }])
+    reply({ type: 'done', id: 1, value: 2 })
+    await expect(result).resolves.toBe(2)
+  })
+
+  it('asks for thumbnails at times and a height, and resolves with the images', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const file = new File(['x'], 'a.mp4')
+    const result = client.thumbnails(file, [0.5, 1.5], 48)
+    expect(sent).toEqual([{ type: 'thumbnails', id: 1, file, times: [0.5, 1.5], height: 48 }])
+    reply({ type: 'done', id: 1, value: [] })
+    await expect(result).resolves.toEqual([])
+  })
+
   it('rejects with the worker’s message when it fails', async () => {
     const { port, reply } = fakePort()
     const client = createClient(port)

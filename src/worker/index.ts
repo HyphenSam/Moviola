@@ -5,5 +5,5 @@ import { handle } from './handle'
 declare const self: DedicatedWorkerGlobalScope
 
 self.addEventListener('message', (event: MessageEvent<Request>) => {
-  void handle(event.data, (reply) => self.postMessage(reply))
+  void handle(event.data, (reply, transfer = []) => self.postMessage(reply, transfer))
 })

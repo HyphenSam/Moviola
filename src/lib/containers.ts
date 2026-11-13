@@ -28,3 +28,33 @@ export function losslessAudioContainer(codec: MediaCodec, codecs: ContainerCodec
   const candidates = [PREFERRED[codec], WAV, MKA, MOV].filter((d): d is Destination => !!d)
   return candidates.find((d) => codecs[d.container].includes(codec)) ?? null
 }
+
+// Each container's usual extension and MIME type: for video, then for audio on its own.
+const FILES: Record<OutputContainer, [video: Omit<Destination, 'container'>, audio?: Omit<Destination, 'container'>]> =
+  {
+    mp4: [
+      { extension: 'mp4', mimeType: 'video/mp4' },
+      { extension: 'm4a', mimeType: 'audio/mp4' },
+    ],
+    mov: [{ extension: 'mov', mimeType: 'video/quicktime' }],
+    mkv: [
+      { extension: 'mkv', mimeType: 'video/x-matroska' },
+      { extension: 'mka', mimeType: 'audio/x-matroska' },
+    ],
+    webm: [
+      { extension: 'webm', mimeType: 'video/webm' },
+      { extension: 'webm', mimeType: 'audio/webm' },
+    ],
+    mpegts: [{ extension: 'ts', mimeType: 'video/mp2t' }],
+    ogg: [{ extension: 'ogg', mimeType: 'audio/ogg' }],
+    mp3: [{ extension: 'mp3', mimeType: 'audio/mpeg' }],
+    flac: [{ extension: 'flac', mimeType: 'audio/flac' }],
+    wav: [{ extension: 'wav', mimeType: 'audio/wav' }],
+    adts: [{ extension: 'aac', mimeType: 'audio/aac' }],
+  }
+
+/** Where a result of this kind goes in `container`, with the container's usual extension. */
+export function destination(container: OutputContainer, kind: 'video' | 'audio'): Destination {
+  const [video, audio] = FILES[container]
+  return { container, ...(kind === 'audio' && audio ? audio : video) }
+}

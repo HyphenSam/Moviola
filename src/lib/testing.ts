@@ -86,18 +86,37 @@ export type FakeJob = {
 }
 
 /** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe.
- * It can encode what `capabilities` says: everything, unless told otherwise.
- * Runs wait in `jobs` until the test finishes or fails them; cancelling rejects as the worker does. */
+ * It can encode what `capabilities` says: everything, unless told otherwise. Keyframes fall every 2 s,
+ * as in the fixtures; thumbnails come back blank (jsdom can't draw). `keyframes` and `thumbnailed`
+ * list what was asked. Runs wait in `jobs` until the test finishes or fails them; cancelling rejects
+ * as the worker does. */
 export function fakeClient(
   probe: (file: File) => MediaInfo | Promise<MediaInfo>,
   capabilities: WorkerCapabilities = ALL_CAPABLE,
-): WorkerClient & { probed: File[]; jobs: FakeJob[] } {
+): WorkerClient & {
+  probed: File[]
+  jobs: FakeJob[]
+  keyframes: { file: File; trackId: number; time: number }[]
+  thumbnailed: { file: File; times: number[]; height: number }[]
+} {
   const probed: File[] = []
   const jobs: FakeJob[] = []
+  const keyframes: { file: File; trackId: number; time: number }[] = []
+  const thumbnailed: { file: File; times: number[]; height: number }[] = []
   return {
     probed,
     jobs,
+    keyframes,
+    thumbnailed,
     capabilities: async () => ({ encodeVideo: capabilities.encodeVideo, encodeAudio: capabilities.encodeAudio }),
+    keyframe: async (file, trackId, time) => {
+      keyframes.push({ file, trackId, time })
+      return Math.floor(time / 2) * 2
+    },
+    thumbnails: async (file, times, height) => {
+      thumbnailed.push({ file, times, height })
+      return times.map(() => null)
+    },
     probe: async (file) => {
       probed.push(file)
       return probe(file)

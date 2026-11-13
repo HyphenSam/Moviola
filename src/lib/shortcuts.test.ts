@@ -22,6 +22,23 @@ describe('shortcutFor', () => {
     expect(key('x')).toBeNull()
   })
 
+  it('maps the timeline keys: comma and full stop step a frame, I and O mark the range', () => {
+    expect(key(',')).toEqual({ type: 'step', frames: -1 })
+    expect(key('.')).toEqual({ type: 'step', frames: 1 })
+    expect(key('i')).toEqual({ type: 'mark', end: 'in' })
+    expect(key('I', { shiftKey: true })).toEqual({ type: 'mark', end: 'in' })
+    expect(key('o')).toEqual({ type: 'mark', end: 'out' })
+    expect(key('O')).toEqual({ type: 'mark', end: 'out' })
+  })
+
+  it('lets a slider or radio keep a typed letter, and a text field always', () => {
+    expect(key('i', { target: el('INPUT', { type: 'text' }) })).toBeNull()
+    expect(key(',', { target: el('TEXTAREA') })).toBeNull()
+    // Sliders and radios only want arrows, Home and End; the timeline's own handles are sliders.
+    expect(key('i', { target: el('DIV', { role: 'slider' }) })).toEqual({ type: 'mark', end: 'in' })
+    expect(key('.', { target: el('BUTTON', { role: 'radio' }) })).toEqual({ type: 'step', frames: 1 })
+  })
+
   it('leaves keys alone with Ctrl, Cmd or Alt held', () => {
     expect(key('ArrowLeft', { ctrlKey: true })).toBeNull()
     expect(key(' ', { metaKey: true })).toBeNull()

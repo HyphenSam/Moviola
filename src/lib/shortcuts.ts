@@ -1,5 +1,11 @@
-/** What a player key does. The timeline's keys (I, O, `,` `.`) come with the timeline. */
-export type Shortcut = { type: 'toggle' } | { type: 'nudge'; seconds: number } | { type: 'start' } | { type: 'end' }
+/** What a player or timeline key does. */
+export type Shortcut =
+  | { type: 'toggle' }
+  | { type: 'nudge'; seconds: number }
+  | { type: 'step'; frames: number }
+  | { type: 'start' }
+  | { type: 'end' }
+  | { type: 'mark'; end: 'in' | 'out' }
 
 /** The parts of a focused element the shortcuts look at. */
 export type KeyTarget = { tagName: string; isContentEditable: boolean; getAttribute(name: string): string | null }
@@ -38,6 +44,16 @@ export function shortcutFor(e: KeyLike): Shortcut | null {
       inputType === 'checkbox'
       ? null
       : { type: 'toggle' }
+  }
+  switch (e.key.toLowerCase()) {
+    case ',':
+      return { type: 'step', frames: -1 }
+    case '.':
+      return { type: 'step', frames: 1 }
+    case 'i':
+      return { type: 'mark', end: 'in' }
+    case 'o':
+      return { type: 'mark', end: 'out' }
   }
   const usesArrows = isRange || ARROW_ROLES.includes(role)
   if (usesArrows) return null

@@ -10,9 +10,12 @@ import { Logo } from './components/Logo'
 import { MediaInfoView } from './components/MediaInfoView'
 import { Stage } from './components/Stage'
 import { ToolRail } from './components/ToolRail'
+import { TrimView } from './components/TrimView'
 import { Button } from './components/ui/Button'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
 import { canSaveToDisk, useJob } from './hooks/useJob'
+import { useKeyframe } from './hooks/useKeyframe'
+import { usePlayer } from './hooks/usePlayer'
 import { useSource } from './hooks/useSource'
 import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
@@ -20,8 +23,9 @@ import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
 import type { Planned } from './lib/plan'
 import { DEFAULT_EXTRACT_AUDIO, defaultAudioTrack, formatProblems, planExtractAudio } from './lib/plans/extract-audio'
+import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
 import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
-import { hasVideo } from './lib/info'
+import { hasVideo, videoTrack } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
@@ -42,6 +46,10 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // So does Extract audio's track; its format and options carry over to the next file.
   const [track, setTrack] = useState<{ sourceId: number; id: number } | null>(null)
   const [audioSettings, setAudioSettings] = useState(DEFAULT_EXTRACT_AUDIO)
+  // The range belongs to one file and is shared by the tools that use one (Trim, later Make GIF); the
+  // whole file until the user picks one. Trim's mode carries over to the next file.
+  const [ranged, setRanged] = useState<{ sourceId: number; range: TimeRange } | null>(null)
+  const [trimMode, setTrimMode] = useState<TrimMode>('fast')
   // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
   const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {} })
   useEffect(() => {
@@ -51,6 +59,24 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const install = useInstallPrompt()
+
+  const video = source && videoTrack(source.info)
+  // The playhead, shared by the player, the timeline and the tools that set times from it.
+  const player = usePlayer(source?.id ?? null, source?.info.duration ?? 0, video?.frameRate ?? null)
+  const range = source ? (ranged?.sourceId === source.id ? ranged.range : wholeFile(source.info)) : null
+  const updateRange = useCallback(
+    (change: (range: TimeRange) => TimeRange) =>
+      source &&
+      setRanged((r) => ({
+        sourceId: source.id,
+        range: change(r?.sourceId === source.id ? r.range : wholeFile(source.info)),
+      })),
+    [source],
+  )
+  const onMark = useCallback(
+    (end: 'in' | 'out', time: number) => updateRange((r) => ({ ...r, [end === 'in' ? 'start' : 'end']: time })),
+    [updateRange],
+  )
 
   const tools = toolStates(source?.info ?? null)
   const tool = source ? (choice?.sourceId === source.id ? choice.tool : defaultTool(source.info)) : null
@@ -79,12 +105,24 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     trackId,
     format: problems?.[audioSettings.format] ? 'original' : audioSettings.format,
   } as const
-  const planned: Planned | null =
-    source && tool === 'extract-audio'
+  // Precise needs encoders this browser may not have; until it can, Fast is in effect.
+  const precise = source ? preciseProblem(source.info, capabilities) : null
+  const mode: TrimMode = precise ? 'fast' : trimMode
+  const fastVideo = !!source && !!video && tool === 'trim' && mode === 'fast'
+  const keyframe = useKeyframe(client, fastVideo ? source.file : null, video?.id ?? null, range?.start ?? 0)
+  const note = fastVideo && range ? keyframeNote(range.start, keyframe, video.frameRate) : null
+
+  const planned: Planned | null = !source
+    ? null
+    : tool === 'extract-audio'
       ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, capabilities)
-      : null
+      : tool === 'trim'
+        ? planTrim(source.info, range!, mode, CONTAINER_CODECS, capabilities)
+        : null
   // An audio file is converted, not extracted from (SPEC.md section 6).
   const converting = !!source && !hasVideo(source.info)
+  const [verb, doing] =
+    tool === 'trim' ? ['Trim', 'Trimming'] : converting ? ['Convert', 'Converting'] : ['Extract', 'Extracting']
   const memoryHint =
     source && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
@@ -187,6 +225,19 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                       setAudioSettings((s) => ({ ...s, ...change }))
                     }}
                   />
+                ) : tool === 'trim' ? (
+                  <TrimView
+                    duration={source.info.duration}
+                    range={range!}
+                    playhead={player.time}
+                    video={!!video}
+                    mode={mode}
+                    preciseProblem={precise}
+                    keyframeNote={note}
+                    onRange={(r) => updateRange(() => r)}
+                    onSeek={player.seek}
+                    onMode={setTrimMode}
+                  />
                 ) : (
                   <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>
                 )}
@@ -207,14 +258,10 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             <div className="sticky bottom-0 border-t border-line bg-panel px-5 py-4">
               <JobAction
                 planned={planned}
-                verb={converting ? 'Convert' : 'Extract'}
+                verb={verb}
                 running={job.running}
                 hint={memoryHint}
-                onStart={() =>
-                  source &&
-                  planned?.plan &&
-                  void job.start(source.file, planned.plan, converting ? 'Converting' : 'Extracting')
-                }
+                onStart={() => source && planned?.plan && void job.start(source.file, planned.plan, doing)}
                 onCancel={job.cancel}
               />
             </div>
@@ -259,7 +306,18 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
               </Button>
             </div>
           )}
-          <Stage source={source} webCodecs={webCodecs} frames={frames} onBrowse={() => input.current?.click()} />
+          <Stage
+            source={source}
+            webCodecs={webCodecs}
+            frames={frames}
+            player={player}
+            thumbnails={client.thumbnails}
+            range={tool === 'trim' ? range : null}
+            cut={note ? keyframe : null}
+            onRange={(r) => updateRange(() => r)}
+            onMark={onMark}
+            onBrowse={() => input.current?.click()}
+          />
           <ExportsStrip exports={job.exports} onRemove={job.remove} />
         </main>
 

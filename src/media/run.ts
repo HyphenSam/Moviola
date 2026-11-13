@@ -6,8 +6,10 @@ import {
   ConversionCanceledError,
   Input,
   Output,
+  Quality,
   StreamTarget,
   type ConversionAudioOptions,
+  type ConversionVideoOptions,
   type InputTrack,
   type StreamTargetChunk,
 } from 'mediabunny'
@@ -15,7 +17,7 @@ import { discardedSentence } from '@/lib/discarded'
 import type { Plan } from '@/lib/plan'
 import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
-import { FORMATS } from './probe'
+import { FORMATS, keyTimestamp } from './probe'
 
 export const CANCELLED = 'Cancelled.'
 
@@ -85,8 +87,30 @@ function audioOptions(
   }
 }
 
+/** Mediabunny's options for re-encoding the plan's video. */
+export function videoOptions({ codec, bitrate }: NonNullable<Plan['video']>): ConversionVideoOptions {
+  return {
+    codec,
+    // A bare number would be a quality level (0 to 1), not bits per second.
+    ...(bitrate && { quality: new Quality({ bitrate }) }),
+    forceTranscode: true,
+    hardwareAcceleration: 'no-preference',
+  }
+}
+
+/** A copied cut starts on the video's keyframe at or before the in point (SPEC.md 6.3), and so does
+ * everything else, so the result starts there in every container and player. Left to Mediabunny, a
+ * container that holds negative timestamps (MP4) would start at the in point and hide the lead-in
+ * behind an edit list, which players honour unevenly. */
+async function fromKeyframe(input: Input, keep: number[], trim: { start: number; end: number }) {
+  const video = (await input.getVideoTracks()).find((t) => keep.includes(t.id))
+  const key = video && (await keyTimestamp(video, trim.start))
+  return key != null && key < trim.start ? { ...trim, start: key } : trim
+}
+
 /** Runs a plan: every kept track copied as is (`copy: { mode: 'forced' }`, so nothing is ever quietly
- * re-encoded) into the plan's container, apart from audio the plan says to re-encode. With a
+ * re-encoded) into the plan's container, apart from video or audio the plan says to re-encode, and cut
+ * to the plan's range (copied video from the keyframe at or before its start). With a
  * `writable` (a file the user chose) the output is streamed to it; without one it's built in memory
  * and returned. A cancelled or failed job aborts the writable, so a half-written file is discarded
  * rather than saved. */
@@ -118,22 +142,26 @@ export async function run(
   const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
   const keep = (track: InputTrack) => (plan.keep.includes(track.id) ? {} : { discard: true })
   const encode = plan.audio
+  const video = plan.video
 
   try {
     if (encode) await ensureEncoder(encode.codec)
     if (signal?.aborted) throw new ConversionCanceledError()
+    const trim = plan.trim && !video ? await fromKeyframe(input, plan.keep, plan.trim) : plan.trim
     const conversion = await Conversion.init({
       input,
       output,
-      video: keep,
+      video: video ? (track) => (plan.keep.includes(track.id) ? videoOptions(video) : { discard: true }) : keep,
       audio: encode
         ? async (track) =>
             plan.keep.includes(track.id) ? audioOptions(encode, await track.getNumberOfChannels()) : { discard: true }
         : keep,
-      // Some containers can't start before 0 (Ogg, with Opus's pre-roll at −7 ms), so copied media may
-      // be shifted; Mediabunny keeps every track in sync when it does. Only a plan that re-encodes
-      // lets Mediabunny transcode; anything else is copied or refused.
-      copy: { mode: encode ? 'preferred' : 'forced', shiftTolerance: Infinity },
+      ...(trim && { trim }),
+      // Some containers can't start before 0 (Ogg, with Opus's pre-roll at −7 ms; and a trim's copied
+      // video, which starts on the keyframe before the in point), so copied media may be shifted;
+      // Mediabunny keeps every track in sync when it does. Only a plan that re-encodes lets Mediabunny
+      // transcode; anything else is copied or refused.
+      copy: { mode: encode || video ? 'preferred' : 'forced', shiftTolerance: Infinity, boundaryPolicy: 'expand' },
       showWarnings: false,
     })
 

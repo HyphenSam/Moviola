@@ -127,6 +127,9 @@ discarded.
 - Mediabunny mixes 5.1 down to stereo properly but has no rule for 7.1 (it keeps only the front pair,
   losing the centre's dialogue), so `run.ts` mixes 7.1 itself in `process`. Its WAV writer has no
   channel mask, so players infer 5.1 or 7.1 from the channel count.
+- A copied trim into MP4 keeps the in point and writes the keyframe lead-in at negative times behind
+  an edit list. `run.ts` moves the start back to the keyframe itself, so the cut is where the UI says.
+- `new Quality(n)` is a quality level from 0 to 1, not a bitrate; a bitrate is `new Quality({ bitrate })`.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
 

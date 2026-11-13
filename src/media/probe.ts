@@ -1,6 +1,7 @@
 import {
   ADTS,
   BlobSource,
+  EncodedPacketSink,
   FLAC,
   Input,
   MATROSKA,
@@ -75,6 +76,30 @@ export async function probe(file: File): Promise<MediaInfo> {
  * don't count; a late start (MPEG-TS) does. */
 export async function firstTimestamp(input: Input): Promise<number> {
   return Math.max(0, await input.getFirstTimestamp())
+}
+
+/** The time of the keyframe a copy starting at `time` begins on: the one at or before it, or the
+ * first, as Mediabunny's own copy picks it (verified from the bitstream, since containers can
+ * mislabel). Times count from the playhead's 0. Null for a track that isn't there or has no packets. */
+export async function keyframeAt(file: File, trackId: number, time: number): Promise<number | null> {
+  const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
+  try {
+    const track = (await input.getTracks()).find((t) => t.id === trackId)
+    if (!track) return null
+    const start = await firstTimestamp(input)
+    const key = await keyTimestamp(track, time + start)
+    return key === null ? null : key - start
+  } finally {
+    input.dispose()
+  }
+}
+
+/** The timestamp of the keyframe a copy from `timestamp` (the track's own clock) starts on. */
+export async function keyTimestamp(track: InputTrack, timestamp: number): Promise<number | null> {
+  const sink = new EncodedPacketSink(track)
+  const options = { verifyKeyPackets: true }
+  const packet = (await sink.getKeyPacket(timestamp, options)) ?? (await sink.getFirstKeyPacket(options))
+  return packet?.timestamp ?? null
 }
 
 /** FLAC's bits per sample, from the STREAMINFO block its decoder description starts with ("fLaC",

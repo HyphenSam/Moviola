@@ -1,6 +1,7 @@
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { capabilities } from '@/media/encoders'
-import { probe } from '@/media/probe'
+import { thumbnails } from '@/media/frames'
+import { keyframeAt, probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
 /** Jobs running now, by request id, so a cancel can reach them. */
@@ -8,7 +9,7 @@ const running = new Map<number, AbortController>()
 
 /** Runs one request and posts its replies. Kept apart from the worker's global scope so Node tests
  * can call it directly. */
-export async function handle(request: Request, post: (reply: Reply) => void): Promise<void> {
+export async function handle(request: Request, post: (reply: Reply, transfer?: Transferable[]) => void): Promise<void> {
   try {
     switch (request.type) {
       case 'probe':
@@ -17,6 +18,17 @@ export async function handle(request: Request, post: (reply: Reply) => void): Pr
       case 'capabilities':
         post({ type: 'done', id: request.id, value: await capabilities() })
         break
+      case 'keyframe':
+        post({ type: 'done', id: request.id, value: await keyframeAt(request.file, request.trackId, request.time) })
+        break
+      case 'thumbnails': {
+        const images = await thumbnails(request.file, request.times, request.height)
+        post(
+          { type: 'done', id: request.id, value: images },
+          images.filter((i) => i !== null),
+        )
+        break
+      }
       case 'cancel':
         running.get(request.id)?.abort()
         break
