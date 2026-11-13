@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { MediaInfo } from '@/lib/info'
 import { fakeAudioInfo, fakeFrames, fakeInfo, fakeVideoTrack } from '@/lib/testing'
 import { Player } from './Player'
@@ -18,6 +18,8 @@ function setup(info: MediaInfo = fakeInfo()) {
 const position = () => screen.getByLabelText('Position')
 
 describe('Player', () => {
+  afterEach(() => localStorage.clear())
+
   it('plays the file natively in a video element', async () => {
     const { media, user } = setup()
     const video = media()!
@@ -54,8 +56,23 @@ describe('Player', () => {
     await user.click(screen.getByRole('button', { name: 'Mute' }))
     expect(media()!.muted).toBe(true)
     expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.5' } })
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.25' } })
+    expect(media()!.volume).toBe(0.25)
+  })
+
+  it('starts at half volume', () => {
+    const { media } = setup()
     expect(media()!.volume).toBe(0.5)
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.5')
+  })
+
+  it('remembers the volume for the next file and the next visit', () => {
+    const first = setup()
+    fireEvent.change(screen.getByRole('slider', { name: 'Volume' }), { target: { value: '0.8' } })
+    first.view.unmount()
+    const { media } = setup()
+    expect(media()!.volume).toBe(0.8)
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.8')
   })
 
   it('answers the keyboard: Space, arrows, Shift+arrows, Home and End', async () => {

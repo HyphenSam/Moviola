@@ -7,8 +7,8 @@ import type { MediaInfo } from './lib/info'
 import { deferred, fakeAudioInfo, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
 
 const TOOLS = [
-  'Extract audio',
   'Media info',
+  'Extract audio',
   'Trim',
   'Change container',
   'Remove audio',

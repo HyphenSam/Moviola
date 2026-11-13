@@ -93,7 +93,9 @@ a normal machine.
 - Audio-only files show a waveform-free panel: the file name, duration and an `<audio>` player.
 
 ### Transport
-Play/pause, position / duration timecode, frame back / forward, mute and volume.
+Play/pause, position / duration timecode, frame back / forward, mute and volume. The volume
+starts at half and is remembered across visits (`localStorage`; if storage is blocked it just
+starts at half).
 
 ### Timeline
 - A strip of thumbnails generated with `CanvasSink` (`frames.ts`) at evenly spaced timestamps, as
@@ -116,7 +118,22 @@ audio-only files; Extract audio is dimmed for files with no audio track. The rai
 The default tool on opening a video is **Media info**; on opening an audio-only file, **Extract
 audio** (shown as "Convert audio" in that case).
 
-### 6.1 Extract audio
+### 6.1 Media info
+
+A read-only view of `MediaInfo` in the settings column, no primary action.
+
+- **File**: name, size (bytes and human), container, duration, overall bitrate.
+- **Tracks**: one group per track: kind and number, codec in plain words with the codec string
+  below in caption ("H.264 High, avc1.640028"), then video size, frame rate, rotation, colour (SDR
+  or HDR, with primaries/transfer when known), or sample rate and channels ("48 kHz, stereo"),
+  bitrate (about), language, name, default flag, and "Can't decode in this browser" if so.
+- **Tags**: any metadata tags, key and value.
+- A secondary button "Copy as text" copies all of it as plain text, one `Key: value` per line, for
+  pasting into a forum or bug report.
+- Plain words for codec names live in one table in `info.ts` (H.264, HEVC, VP8, VP9, AV1, ProRes,
+  AAC, Opus, Vorbis, MP3, FLAC, AC-3, E-AC-3, DTS, TrueHD, PCM 16-bit, …).
+
+### 6.2 Extract audio
 
 Gets the audio out of a video, losslessly by default.
 
@@ -152,21 +169,6 @@ Gets the audio out of a video, losslessly by default.
   and FLAC are disabled with "This browser can't decode AC-3. Original still works."
 - Output name: `<stem>.<ext>`, plus ` (track 2)` when the file has more than one audio track and
   the chosen one isn't the first.
-
-### 6.2 Media info
-
-A read-only view of `MediaInfo` in the settings column, no primary action.
-
-- **File**: name, size (bytes and human), container, duration, overall bitrate.
-- **Tracks**: one group per track: kind and number, codec in plain words with the codec string
-  below in caption ("H.264 High, avc1.640028"), then video size, frame rate, rotation, colour (SDR
-  or HDR, with primaries/transfer when known), or sample rate and channels ("48 kHz, stereo"),
-  bitrate (about), language, name, default flag, and "Can't decode in this browser" if so.
-- **Tags**: any metadata tags, key and value.
-- A secondary button "Copy as text" copies all of it as plain text, one `Key: value` per line, for
-  pasting into a forum or bug report.
-- Plain words for codec names live in one table in `info.ts` (H.264, HEVC, VP8, VP9, AV1, ProRes,
-  AAC, Opus, Vorbis, MP3, FLAC, AC-3, E-AC-3, DTS, TrueHD, PCM 16-bit, …).
 
 ### 6.3 Trim
 

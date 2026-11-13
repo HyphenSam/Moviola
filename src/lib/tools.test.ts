@@ -9,8 +9,8 @@ describe('toolStates', () => {
   it('offers every tool for a video with audio', () => {
     const states = toolStates(fakeInfo())
     expect(states.map((s) => s.label)).toEqual([
-      'Extract audio',
       'Media info',
+      'Extract audio',
       'Trim',
       'Change container',
       'Remove audio',
@@ -23,7 +23,7 @@ describe('toolStates', () => {
 
   it('dims the video-only tools for an audio file and calls Extract audio "Convert audio"', () => {
     const states = toolStates(fakeAudioInfo())
-    expect(states[0].label).toBe('Convert audio')
+    expect(states.find((s) => s.id === 'extract-audio')!.label).toBe('Convert audio')
     const needsVideo = 'This file has no video.'
     expect(reasons(states)).toEqual({
       'remove-audio': needsVideo,

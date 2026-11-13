@@ -81,7 +81,7 @@ Build:
    for tests in src/lib/testing.ts, and src/hooks/useSource.ts. App takes the client as a prop.
 4. Opening a file: drop, Choose file, launchQueue. Errors as SPEC.md section 3. The file card.
    Tools enable and dim per SPEC.md section 6's rules; Media info opens by default.
-5. The Media info tool (SPEC.md 6.2) with "Copy as text".
+5. The Media info tool (SPEC.md 6.1) with "Copy as text".
 6. The player (SPEC.md section 5): native <video> when it plays, otherwise CanvasSink frames with
    the "Preview without sound" chip; the audio-only panel; the transport bar; keyboard shortcuts
    that don't need the timeline. The timeline comes in phase 5.
@@ -110,7 +110,7 @@ Build the job machinery and the first real tool:
 3. Saving: showSaveFilePicker inside the click where available, streaming to disk; memory and a
    Download button otherwise. Cancelling the picker cancels quietly. beforeunload while running.
 4. The progress component, the Lossless/Re-encodes badge, and the exports strip (DESIGN.md).
-5. src/lib/containers.ts with losslessAudioContainer (SPEC.md 6.1's table, every row tested),
+5. src/lib/containers.ts with losslessAudioContainer (SPEC.md 6.2's table, every row tested),
    src/lib/names.ts (SPEC.md section 8), and src/lib/plans/extract-audio.ts for the Original format
    only, with the track picker.
 6. End-to-end Node tests: extract from each fixture and check the output's container, extension and
@@ -135,7 +135,7 @@ Read CLAUDE.md, SPEC.md. This is phase 4 of PHASES.md; phases 1–3 are done.
 2. src/media/encoders.ts: register @mediabunny/mp3-encoder, @mediabunny/flac-encoder and
    @mediabunny/aac-encoder only when the browser can't encode the codec, loaded lazily so they
    aren't in the first download.
-3. Extend the extract-audio planner and view with MP3, WAV and FLAC exactly as SPEC.md 6.1
+3. Extend the extract-audio planner and view with MP3, WAV and FLAC exactly as SPEC.md 6.2
    describes: options, badges and captions, the undecodable-codec rule (test with the AC-3
    fixture's info), the "Already MP3" hint, and the audio-only "Convert audio" naming.
 4. Add the encoders' credits to About.

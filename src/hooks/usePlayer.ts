@@ -1,4 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { readVolume, writeVolume } from '@/lib/settings'
+
+/** `localStorage`, or null where reading the property itself throws (blocked site data). */
+function storage() {
+  try {
+    return localStorage
+  } catch {
+    return null
+  }
+}
 
 /** What actually plays: a media element, or decoded frames drawn on a canvas. */
 export type Backend = { play(): void; pause(): void; seek(time: number): void }
@@ -9,7 +19,11 @@ export function usePlayer(duration: number, frameRate: number | null) {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(false)
-  const [volume, setVolume] = useState(1)
+  const [volume, setVolumeState] = useState(() => readVolume(storage()))
+  const setVolume = useCallback((v: number) => {
+    setVolumeState(v)
+    writeVolume(storage(), v)
+  }, [])
   const backend = useRef<Backend | null>(null)
   // The latest values, for controls called between renders (keys pressed in quick succession).
   const now = useRef({ time: 0, playing: false })

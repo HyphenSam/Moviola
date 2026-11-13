@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { describeInfo, infoAsText, type MediaInfo } from '@/lib/info'
 import { Button } from './ui/Button'
 
-/** Media info (SPEC.md 6.2): everything known about the file, read-only, and a way to copy it. */
+/** Media info (SPEC.md 6.1): everything known about the file, read-only, and a way to copy it. */
 export function MediaInfoView({ info }: { info: MediaInfo }) {
   const [copied, setCopied] = useState(false)
 
