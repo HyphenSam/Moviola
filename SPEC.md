@@ -307,9 +307,12 @@ cheap) but never block the UI.
 
 ### Where results go
 - If `window.showSaveFilePicker` exists, the primary action first opens the save dialog (suggested
-  name and type from the plan) inside the click, then sends the `FileSystemWritableFileStream` to
-  the worker, which writes through Mediabunny's `StreamTarget` (`chunked: true`). The export shows
-  "Saved" with the name. Cancelling the dialog cancels the job quietly.
+  name and type from the plan) inside the click, then sends the file handle to the worker, which
+  opens a writable stream on it and writes through Mediabunny's `StreamTarget` (`chunked: true`).
+  The export shows "Saved" with the name. Cancelling the dialog cancels the job quietly. A cancelled
+  or failed job aborts the stream (never closes it, which would commit a partial file) and removes
+  the empty file the dialog made, where the browser has `remove()`; a file the user chose to
+  replace keeps its old contents.
 - Otherwise the worker uses `BufferTarget` and returns the bytes as a `Blob` (transferred); the
   export has a Download button (an object URL, revoked when the export is removed). When the source
   is over 2 GB in this mode, a hint under the action warns that the result is held in memory until
@@ -365,13 +368,14 @@ sources, committed. At least:
 | `h264-aac-2audio.mkv` | H.264 + two AAC tracks (eng, fra) | track lists, remove audio keeping one |
 | `vp9-opus.webm` | VP9 + Opus | extract to .opus, container change to MP4 |
 | `h264-ac3.mkv` | H.264 + AC-3 | extract to .mka, WebM refusal |
-| `h264-mp3.mov` | H.264 + MP3 | extract to .mp3 (copied); Mediabunny 1.65 can't name MOV's `.mp3` entry yet |
+| `h264-mp3.mov` | H.264 + MP3 | extract to .mp3 (copied); Mediabunny 1.65 can't name MOV's `.mp3` entry yet, so for now Extract audio says it can't tell the codec |
 | `h264-pcm.mov` | H.264 + PCM s16le | extract to .wav |
 | `h264-flac.mkv` | H.264 + FLAC | extract to .flac |
 | `h264-only.mp4` | H.264, no audio | Extract audio dimmed |
 | `rotated.mp4` | H.264 with 90° rotation metadata | display size, frame grab |
 | `h264-aac.ts` | `h264-aac.mp4` in MPEG-TS, starting near 1.4 s | non-zero start, the fallback preview |
 | `aac.m4a` | AAC audio only | audio-only behaviour |
+| `flac.flac` | FLAC audio only | a bare FLAC file's length (Mediabunny misreads it if probed carelessly) |
 | `notvideo.txt` | text | the "can't open" message |
 
 Node tests open these with `FilePathSource` (or a `BlobSource` over the file's bytes) and check

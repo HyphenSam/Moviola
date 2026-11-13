@@ -2,7 +2,8 @@
 // (CLAUDE.md): each behaves like the real thing in the ways the tests rely on.
 import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
 import type { AudioTrack, MediaInfo, VideoTrack } from './info'
-import type { WorkerClient } from './protocol'
+import type { Plan } from './plan'
+import type { RunResult, TargetSpec, WorkerClient } from './protocol'
 
 export function fakeVideoTrack(over: Partial<VideoTrack> = {}): VideoTrack {
   return {
@@ -64,14 +65,50 @@ export const fakeAudioInfo = (over: Partial<MediaInfo> = {}) =>
     ...over,
   })
 
-/** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe. */
-export function fakeClient(probe: (file: File) => MediaInfo | Promise<MediaInfo>): WorkerClient & { probed: File[] } {
+/** A job the fake client was asked to run; the test moves it along. */
+export type FakeJob = {
+  file: File
+  plan: Plan
+  target: TargetSpec
+  cancelled: boolean
+  progress(fraction: number | null): void
+  finish(result: RunResult): void
+  fail(message: string): void
+}
+
+/** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe.
+ * Runs wait in `jobs` until the test finishes or fails them; cancelling rejects as the worker does. */
+export function fakeClient(
+  probe: (file: File) => MediaInfo | Promise<MediaInfo>,
+): WorkerClient & { probed: File[]; jobs: FakeJob[] } {
   const probed: File[] = []
+  const jobs: FakeJob[] = []
   return {
     probed,
+    jobs,
     probe: async (file) => {
       probed.push(file)
       return probe(file)
+    },
+    run: (file, plan, target, onProgress) => {
+      const result = deferred<RunResult>()
+      const job: FakeJob = {
+        file,
+        plan,
+        target,
+        cancelled: false,
+        progress: (fraction) => onProgress?.(fraction),
+        finish: result.resolve,
+        fail: (message) => result.reject(new Error(message)),
+      }
+      jobs.push(job)
+      return {
+        result: result.promise,
+        cancel: () => {
+          job.cancelled = true
+          result.reject(new Error('Cancelled.'))
+        },
+      }
     },
   }
 }

@@ -52,6 +52,10 @@ ff -display_rotation 90 -i h264-only.mp4 -c copy rotated.mp4
 # shellcheck disable=SC2046
 ff $(tone 440) -c:a aac -b:a 64k aac.m4a
 
+# A bare FLAC file: Mediabunny measures its length wrongly while also reading packet stats.
+# shellcheck disable=SC2046
+ff $(tone 440) -c:a flac flac.flac
+
 printf 'This is not a video.\n' > notvideo.txt
 
 # Every fixture stays small enough to commit.

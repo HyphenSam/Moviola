@@ -1,5 +1,9 @@
-import type { Reply, Request } from '@/lib/protocol'
+import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { probe } from '@/media/probe'
+import { JobProblem, run } from '@/media/run'
+
+/** Jobs running now, by request id, so a cancel can reach them. */
+const running = new Map<number, AbortController>()
 
 /** Runs one request and posts its replies. Kept apart from the worker's global scope so Node tests
  * can call it directly. */
@@ -9,8 +13,70 @@ export async function handle(request: Request, post: (reply: Reply) => void): Pr
       case 'probe':
         post({ type: 'done', id: request.id, value: await probe(request.file) })
         break
+      case 'cancel':
+        running.get(request.id)?.abort()
+        break
+      case 'run': {
+        // Registered before anything is awaited, so a cancel sent straight after always finds it.
+        const controller = new AbortController()
+        running.set(request.id, controller)
+        try {
+          post({ type: 'progress', id: request.id, fraction: null })
+          const result = await runTo(request.target, request, controller.signal, (fraction) =>
+            post({ type: 'progress', id: request.id, fraction }),
+          )
+          post({ type: 'done', id: request.id, value: result })
+        } finally {
+          running.delete(request.id)
+        }
+        break
+      }
     }
   } catch (error) {
-    post({ type: 'failed', id: request.id, message: error instanceof Error ? error.message : String(error) })
+    const message = error instanceof Error ? error.message : String(error)
+    const worded = request.type !== 'run' || error instanceof JobProblem
+    post({ type: 'failed', id: request.id, message: worded ? message : `Something went wrong: ${message}` })
+  }
+}
+
+async function runTo(
+  target: TargetSpec,
+  { file, plan }: Extract<Request, { type: 'run' }>,
+  signal: AbortSignal,
+  onProgress: (fraction: number) => void,
+) {
+  // Mediabunny reports progress far more often than a bar can show; a step of 0.5% is plenty.
+  let last = -1
+  const progress = (fraction: number) => {
+    const step = Math.floor(fraction * 200)
+    if (step === last) return
+    last = step
+    onProgress(fraction)
+  }
+
+  if (target.type === 'memory') {
+    const result = await run(file, plan, null, { signal, onProgress: progress })
+    return { size: result.size, blob: new Blob([result.buffer!], { type: plan.mimeType }) }
+  }
+
+  const writable = await target.handle.createWritable()
+  try {
+    const result = await run(file, plan, writable, { signal, onProgress: progress })
+    return { size: result.size, blob: null }
+  } catch (error) {
+    await discard(target.handle)
+    throw error
+  }
+}
+
+/** The save dialog makes an empty file at once. If the job never wrote it, remove it, so a cancelled
+ * job leaves nothing behind. A file the user chose to replace still holds its old contents (the
+ * stream was aborted) and is left alone. `remove()` is Chrome's; elsewhere the empty file stays. */
+async function discard(handle: FileSystemFileHandle) {
+  try {
+    const removable = handle as FileSystemFileHandle & { remove?: () => Promise<void> }
+    if ((await handle.getFile()).size === 0) await removable.remove?.()
+  } catch {
+    // Nothing more can be done; the job's failure is what the user needs to hear about.
   }
 }

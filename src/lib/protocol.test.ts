@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createClient, type Port, type Reply, type Request } from './protocol'
+import type { Plan } from './plan'
 import { fakeInfo } from './testing'
+
+const plan: Plan = { kind: 'audio', container: 'mp4', name: 'a.m4a', mimeType: 'audio/mp4', lossless: true, keep: [2] }
 
 /** A worker stand-in: records what was posted and lets the test reply. */
 function fakePort() {
@@ -43,5 +46,29 @@ describe('createClient', () => {
     reply({ type: 'done', id: 1, value: fakeInfo({ name: 'one.mp4' }) })
     expect((await first).name).toBe('one.mp4')
     expect((await second).name).toBe('two.mp4')
+  })
+
+  it('runs a plan, passing progress on and resolving with the result', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const file = new File(['x'], 'a.mp4')
+    const progress: (number | null)[] = []
+    const job = client.run(file, plan, { type: 'memory' }, (f) => progress.push(f))
+    expect(sent).toEqual([{ type: 'run', id: 1, file, plan, target: { type: 'memory' } }])
+    reply({ type: 'progress', id: 1, fraction: null })
+    reply({ type: 'progress', id: 1, fraction: 0.5 })
+    const blob = new Blob(['y'])
+    reply({ type: 'done', id: 1, value: { size: 1, blob } })
+    await expect(job.result).resolves.toEqual({ size: 1, blob })
+    expect(progress).toEqual([null, 0.5])
+  })
+
+  it('asks the worker to cancel a run by its id', () => {
+    const { port, sent } = fakePort()
+    const client = createClient(port)
+    client.probe(new File(['x'], 'a.mp4'))
+    const job = client.run(new File(['x'], 'a.mp4'), plan, { type: 'memory' })
+    job.cancel()
+    expect(sent.at(-1)).toEqual({ type: 'cancel', id: 2 })
   })
 })

@@ -21,7 +21,7 @@ export const CANT_OPEN = 'Moviola can’t open this file. It reads MP4, MOV, MKV
 
 // The formats Moviola reads, each with its MediaInfo name. Not ALL_FORMATS: that includes HLS, a
 // playlist of other files, which a single File can't be.
-const FORMATS = new Map<InputFormat, Container>([
+export const FORMATS = new Map<InputFormat, Container>([
   [MP4, 'mp4'],
   [QTFF, 'mov'],
   [WEBM, 'webm'],
@@ -43,13 +43,15 @@ export async function probe(file: File): Promise<MediaInfo> {
   const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
   try {
     const format = await input.getFormat()
-    const [tracks, start, end, tags, mimeType] = await Promise.all([
-      input.getTracks().then((all) => Promise.all(all.map(describeTrack))),
+    // The length first, then the tracks: Mediabunny 1.65's FLAC reader gets the length and the packet
+    // stats wrong (a fraction of a second) when both are read at the same time.
+    const [start, end, tags, mimeType] = await Promise.all([
       firstTimestamp(input),
       input.computeDuration(),
       input.getMetadataTags(),
       input.getMimeType(),
     ])
+    const tracks = await Promise.all((await input.getTracks()).map(describeTrack))
     return {
       name: file.name,
       size: file.size,

@@ -1,21 +1,28 @@
 import { Download, X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
+import { ExportsStrip } from './components/ExportsStrip'
+import { ExtractAudioView } from './components/ExtractAudioView'
 import { FileCard } from './components/FileCard'
+import { JobAction } from './components/JobAction'
 import { Logo } from './components/Logo'
 import { MediaInfoView } from './components/MediaInfoView'
 import { Stage } from './components/Stage'
 import { ToolRail } from './components/ToolRail'
 import { Button } from './components/ui/Button'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
+import { canSaveToDisk, useJob } from './hooks/useJob'
 import { useSource } from './hooks/useSource'
 import { APP_NAME } from './lib/brand'
 import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
+import type { Planned } from './lib/plan'
+import { defaultAudioTrack, planExtractAudio } from './lib/plans/extract-audio'
 import type { WorkerClient } from './lib/protocol'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
+import { CONTAINER_CODECS } from './media/formats'
 
 /** The installed app's file handler hands files over here (manifest `file_handlers`). */
 type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(): Promise<File> }[] }) => void): void }
@@ -26,9 +33,12 @@ type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(
  * the thumbnail and the fallback preview. Tests pass fakes for both.
  */
 export function App({ webCodecs, client, frames }: { webCodecs: boolean; client: WorkerClient; frames: OpenFrames }) {
-  const { source, opening, error, open, dismissError } = useSource(client)
+  const { source, opening, error, open: openSource, dismissError } = useSource(client)
+  const job = useJob(client)
   // The chosen tool belongs to one file; a newly opened file starts on its default tool.
   const [choice, setChoice] = useState<{ sourceId: number; tool: ToolId } | null>(null)
+  // So does Extract audio's track.
+  const [track, setTrack] = useState<{ sourceId: number; id: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const install = useInstallPrompt()
@@ -36,6 +46,28 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const tools = toolStates(source?.info ?? null)
   const tool = source ? (choice?.sourceId === source.id ? choice.tool : defaultTool(source.info)) : null
   const toolName = tools.find((t) => t.id === tool)?.label
+
+  // Opening another file while a job runs would leave the job writing for a file that's gone.
+  const { running, cancel } = job
+  const open = useCallback(
+    (file: File) => {
+      if (running) {
+        if (!window.confirm('Cancel the running job and open the new file?')) return
+        cancel()
+      }
+      openSource(file)
+    },
+    [running, cancel, openSource],
+  )
+
+  const trackId =
+    source && track?.sourceId === source.id ? track.id : ((source && defaultAudioTrack(source.info)?.id) ?? 0)
+  const planned: Planned | null =
+    source && tool === 'extract-audio' ? planExtractAudio(source.info, { trackId }, CONTAINER_CODECS) : null
+  const memoryHint =
+    source && source.info.size > 2_000_000_000 && !canSaveToDisk()
+      ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
+      : null
 
   // Files dropped anywhere on the window. Always cancel, or the browser opens what's dropped in
   // place of the app.
@@ -124,6 +156,12 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 </h2>
                 {tool === 'info' ? (
                   <MediaInfoView info={source.info} />
+                ) : tool === 'extract-audio' ? (
+                  <ExtractAudioView
+                    info={source.info}
+                    trackId={trackId}
+                    onTrackChange={(id) => setTrack({ sourceId: source.id, id })}
+                  />
                 ) : (
                   <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>
                 )}
@@ -139,6 +177,19 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
               </section>
             )}
           </div>
+          {(planned || job.running) && (
+            // Pinned at the foot of the column; on narrow screens it sticks to the bottom of the screen.
+            <div className="sticky bottom-0 border-t border-line bg-panel px-5 py-4">
+              <JobAction
+                planned={planned}
+                verb="Extract"
+                running={job.running}
+                hint={memoryHint}
+                onStart={() => source && planned?.plan && void job.start(source.file, planned.plan, 'Extracting')}
+                onCancel={job.cancel}
+              />
+            </div>
+          )}
         </aside>
 
         <main className="order-2 flex min-h-[55dvh] min-w-0 flex-col lg:order-none lg:min-h-0">
@@ -180,6 +231,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             </div>
           )}
           <Stage source={source} webCodecs={webCodecs} frames={frames} onBrowse={() => input.current?.click()} />
+          <ExportsStrip exports={job.exports} onRemove={job.remove} />
         </main>
 
         <div

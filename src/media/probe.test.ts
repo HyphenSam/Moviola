@@ -100,6 +100,15 @@ describe('probe', () => {
     expect(info.tracks.map((t) => t.kind)).toEqual(['audio'])
   })
 
+  it('reads a bare FLAC file’s full length and bitrate', async () => {
+    // Mediabunny 1.65 gets both wrong (0.192 s) when they're measured at the same time.
+    const info = await probe(fixture('flac.flac'))
+    expect(info.container).toBe('flac')
+    expect(info.duration).toBeCloseTo(4, 2)
+    expect(audio(info)[0]).toMatchObject({ codec: 'flac', sampleRate: 48000, channels: 1 })
+    expect(audio(info)[0].bitrate).toBeGreaterThan(100_000)
+  })
+
   it('refuses a file that isn’t media with the sentence the user sees', async () => {
     await expect(probe(fixture('notvideo.txt'))).rejects.toThrow(CANT_OPEN)
     expect(CANT_OPEN).toBe('Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.')

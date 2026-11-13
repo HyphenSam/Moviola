@@ -73,9 +73,12 @@ is lossless or re-encodes.
 - `src/lib/` pure logic: `info.ts` (the `MediaInfo` type and helpers), `capabilities.ts` (what this
   browser can decode and encode, as plain data), `containers.ts` (which container holds which codecs;
   the lossless audio container), `plans/` (one module per tool: settings + info + capabilities in,
-  `Plan` or problems out), `bitrate.ts` (target size and quality maths), `timecode.ts`, `names.ts`,
-  `settings.ts`, `protocol.ts` (page ↔ worker), `format-bytes.ts`.
-- `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `frames.ts` (thumbnails, frame grabs and GIF
+  `Plan` or problems out; `plan.ts` holds the `Plan` type), `discarded.ts` (Mediabunny's discarded
+  tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
+  size and quality maths), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
+  `format-bytes.ts`.
+- `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
+  each container holds as plain data for the planners), `frames.ts` (thumbnails, frame grabs and GIF
   frames), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them).
 - `src/worker/` the Web Worker: receives a `File` and a `Plan`, runs it with `src/media/`, posts
   progress, cancels on request.
@@ -116,6 +119,13 @@ discarded.
 - Chrome and Firefox both play MKV natively now; MPEG-TS is what reaches the fallback preview.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
+- Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream
+  commits it. `run.ts` wraps the stream so only a finished output closes it; anything else aborts.
+- Opus in WebM starts before 0 (pre-roll, −7 ms in the fixture) and Ogg can't, so copies use
+  `shiftTolerance: Infinity`; Mediabunny keeps the tracks in sync when it shifts.
+- AAC packets read from MPEG-TS keep their ADTS headers; MP4 stores the frames without them.
+- Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
+  once, so `probe` reads the length before the tracks.
 
 ## Hosting facts that bite
 
