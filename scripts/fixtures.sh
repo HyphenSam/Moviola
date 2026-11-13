@@ -43,6 +43,9 @@ ff "${video[@]}" $(tone 440) -map 0 -map 1 "${x264[@]}" -c:a flac -shortest h264
 
 ff "${video[@]}" "${x264[@]}" h264-only.mp4
 
+# MPEG-TS starts its timestamps near 1.4 s, not 0: the player and planners must count from there.
+ff -i h264-aac.mp4 -c copy h264-aac.ts
+
 # Stored 320×180 with 90° display rotation, so it shows as 180×320.
 ff -display_rotation 90 -i h264-only.mp4 -c copy rotated.mp4
 

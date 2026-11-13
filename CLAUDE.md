@@ -110,6 +110,10 @@ discarded.
   `format.getSupportedCodecs()`; don't keep a second copy of these tables.
 - H.264 and HEVC need even dimensions; round resized sizes down to even numbers.
 - MP4 and MOV written to a stream use `fastStart: 'reserve'`; written to memory, `'in-memory'`.
+- Timestamps don't always start at 0. MPEG-TS starts near 1.4 s, and MP4 AAC priming goes slightly
+  negative. `MediaInfo.start` is the playhead's 0 (first timestamp, clamped at 0); add it when
+  asking Mediabunny for a time. The first video frame can be a little later than `start`.
+- Chrome and Firefox both play MKV natively now; MPEG-TS is what reaches the fallback preview.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 

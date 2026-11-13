@@ -29,7 +29,8 @@ don't build it).
 - Accepted: MP4, M4V, MOV, MKV, WebM, TS/M2TS/MTS, and audio files MP3, M4A, WAV, FLAC, OGG/OPUS,
   AAC. The file input's `accept` lists these extensions; dropping anything else is still tried,
   because extensions lie.
-- Opening runs `probe` in the worker: Mediabunny `Input` with a `BlobSource` and `ALL_FORMATS`.
+- Opening runs `probe` in the worker: Mediabunny `Input` with a `BlobSource` and the formats
+  `MediaInfo.container` lists (`ALL_FORMATS` less HLS, a playlist a single file can't be).
   If no format matches: "Moviola can't open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS
   video." The previous file, if any, stays open.
 - Opening a file while a job runs asks first: "Cancel the running job and open the new file?"
@@ -46,13 +47,15 @@ type MediaInfo = {
   name: string
   size: number // bytes
   container: 'mp4' | 'mov' | 'mkv' | 'webm' | 'mpegts' | 'mp3' | 'wav' | 'flac' | 'ogg' | 'adts'
-  duration: number // seconds
+  mimeType: string // with codecs, for canPlayType
+  start: number // first timestamp ≥ 0 (MPEG-TS often starts near 1.4 s); the playhead's 0
+  duration: number // seconds, from start to the end
   tags: Record<string, string> // title, artist, date, comment… as Mediabunny gives them
   tracks: Track[]
 }
 type Track = VideoTrack | AudioTrack | SubtitleTrack
 type Common = {
-  id: number // Mediabunny's track number
+  id: number // Mediabunny's track id, unique in the file
   codec: string | null // Mediabunny's codec name ('avc', 'aac', 'ac3', …); null if unknown
   codecString: string | null // full codec string ('avc1.64001f'), for the info view
   language: string | null
@@ -360,11 +363,12 @@ sources, committed. At least:
 | `h264-aac-2audio.mkv` | H.264 + two AAC tracks (eng, fra) | track lists, remove audio keeping one |
 | `vp9-opus.webm` | VP9 + Opus | extract to .opus, container change to MP4 |
 | `h264-ac3.mkv` | H.264 + AC-3 | extract to .mka, WebM refusal |
-| `h264-mp3.mov` | H.264 + MP3 | extract to .mp3 (copied) |
+| `h264-mp3.mov` | H.264 + MP3 | extract to .mp3 (copied); Mediabunny 1.65 can't name MOV's `.mp3` entry yet |
 | `h264-pcm.mov` | H.264 + PCM s16le | extract to .wav |
 | `h264-flac.mkv` | H.264 + FLAC | extract to .flac |
 | `h264-only.mp4` | H.264, no audio | Extract audio dimmed |
 | `rotated.mp4` | H.264 with 90° rotation metadata | display size, frame grab |
+| `h264-aac.ts` | `h264-aac.mp4` in MPEG-TS, starting near 1.4 s | non-zero start, the fallback preview |
 | `aac.m4a` | AAC audio only | audio-only behaviour |
 | `notvideo.txt` | text | the "can't open" message |
 

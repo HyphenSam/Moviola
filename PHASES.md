@@ -11,7 +11,7 @@ Have ffmpeg on your PATH (phase 1 uses it to make test files).
 | Phase | What | Status |
 |---|---|---|
 | 1 | Scaffold, deploy, app shell | ☑ |
-| 2 | Open a file, Media info, player | ☐ |
+| 2 | Open a file, Media info, player | ☑ |
 | 3 | Worker jobs, saving, Extract audio (lossless) | ☐ |
 | 4 | Extract audio: MP3, WAV, FLAC | ☐ |
 | 5 | Timeline and Trim | ☐ |
