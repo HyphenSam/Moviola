@@ -33,7 +33,7 @@ export function ToolRail({
       onValueChange={(v) => v && onChange(v as ToolId)}
       disabled={disabled}
       // The chip row hides its scrollbar; the chip cut off at the edge shows there's more.
-      className="flex gap-1.5 overflow-x-auto px-4 py-2.5 [scrollbar-width:none] lg:[scrollbar-width:thin]lg:flex-col lg:gap-1 lg:overflow-x-visible lg:overflow-y-auto lg:px-1.5 lg:py-2"
+      className="flex gap-1.5 overflow-x-auto px-4 py-2.5 [scrollbar-width:none] lg:[scrollbar-width:thin] lg:flex-col lg:gap-1 lg:overflow-x-visible lg:overflow-y-auto lg:px-1 lg:py-2"
     >
       {TOOLS.map((tool) => {
         const Icon = ICONS[tool.id]
@@ -49,7 +49,7 @@ export function ToolRail({
               'lg:h-auto lg:flex-col lg:gap-1 lg:px-1 lg:py-2.5 lg:text-xs lg:font-normal lg:leading-tight lg:shadow-none',
               'enabled:hover:bg-sunken enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-45',
               'data-[state=on]:bg-sunken data-[state=on]:text-ink data-[state=on]:shadow-[0_0_0_1.5px_var(--color-focus)] lg:data-[state=on]:shadow-none',
-              'lg:after:absolute lg:after:inset-y-2 lg:after:-right-1.5 lg:after:w-[3px] lg:after:rounded-l-full lg:data-[state=on]:after:bg-focus',
+              'lg:after:absolute lg:after:inset-y-2 lg:after:-right-1 lg:after:w-[3px] lg:after:rounded-l-full lg:data-[state=on]:after:bg-focus',
             ].join(' ')}
           >
             <Icon aria-hidden="true" className="size-4 lg:size-5" strokeWidth={1.75} />
