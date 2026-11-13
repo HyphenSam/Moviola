@@ -54,10 +54,13 @@ describe('extract audio, Original', () => {
     ['h264-aac-2audio.mkv', null, 'h264-aac-2audio.m4a', 'mp4', 'aac'],
     ['h264-aac-2audio.mkv', 3, 'h264-aac-2audio (track 2).m4a', 'mp4', 'aac'],
     ['vp9-opus.webm', null, 'vp9-opus.opus', 'ogg', 'opus'],
+    ['opus-51.webm', null, 'opus-51.opus', 'ogg', 'opus'],
     ['h264-ac3.mkv', null, 'h264-ac3.mka', 'mkv', 'ac3'],
     ['h264-pcm.mov', null, 'h264-pcm.wav', 'wav', 'pcm-s16'],
     ['h264-flac.mkv', null, 'h264-flac.flac', 'flac', 'flac'],
     ['flac.flac', null, 'flac.flac', 'flac', 'flac'],
+    ['pcm-51.wav', null, 'pcm-51.wav', 'wav', 'pcm-s16'],
+    ['pcm-71.wav', null, 'pcm-71.wav', 'wav', 'pcm-s16'],
   ] as const)('%s (track %s) → %s', async (name, trackId, outName, container, codec) => {
     const { source, info, plan, result, output, outInfo } = await extract(name, trackId)
     expect(plan.name).toBe(outName)
@@ -70,6 +73,8 @@ describe('extract audio, Original', () => {
     expect(original.length).toBeGreaterThan(1000)
     expect(Buffer.from(await packetBytes(output, audioId(outInfo))).equals(original)).toBe(true)
     expect(outInfo.duration).toBeCloseTo(info.duration, 0)
+    const channels = (i: MediaInfo, id: number) => (i.tracks.find((t) => t.id === id) as AudioTrack).channels
+    expect(channels(outInfo, audioId(outInfo))).toBe(channels(info, sourceTrack))
   })
 
   it('can’t copy the MP3 in h264-mp3.mov, whose codec Mediabunny 1.65 can’t name', async () => {
@@ -118,6 +123,70 @@ describe('extract audio, converted', () => {
     const { outInfo } = await extract('h264-pcm.mov', null, { format: 'mp3', mp3Bitrate: kbps })
     const bitrate = outInfo.tracks[0].bitrate!
     expect(Math.abs(bitrate - kbps * 1000) / (kbps * 1000)).toBeLessThan(0.03)
+  })
+})
+
+const int16 = (bytes: Uint8Array) => new Int16Array(bytes.slice().buffer)
+
+/** Stereo from 5.1 or 7.1 (L, R, C, LFE, then the surround pairs), as ITU-R BS.775 mixes it: each
+ * side keeps its front channel and takes the centre and its own surrounds at √½; the LFE is left out. */
+function stereoMix(frame: Int16Array): [number, number] {
+  const [l, r, c, , ...surrounds] = frame
+  const side = (front: number, odd: number) =>
+    front + Math.SQRT1_2 * surrounds.reduce((sum, s, i) => (i % 2 === odd ? sum + s : sum), c)
+  return [side(l, 0), side(r, 1)]
+}
+
+describe('extract audio, converted from surround', () => {
+  it.each(['pcm-51.wav', 'pcm-71.wav'])('%s keeps every channel, in order, in 16-bit WAV', async (name) => {
+    const { source, info, plan, output, outInfo } = await extract(name, null, { format: 'wav', wavBits: 16 })
+    expect(plan.lossless).toBe(true)
+    expect((outInfo.tracks[0] as AudioTrack).channels).toBe((info.tracks[0] as AudioTrack).channels)
+    const original = await packetBytes(source, audioId(info))
+    expect(Buffer.from(await packetBytes(output, audioId(outInfo))).equals(original)).toBe(true)
+  })
+
+  it.each([
+    ['pcm-51.wav', { format: 'wav', wavBits: 24 }, 'pcm-s24', 6],
+    ['pcm-51.wav', { format: 'flac' }, 'flac', 6],
+    ['pcm-71.wav', { format: 'wav', wavBits: 24 }, 'pcm-s24', 8],
+    ['pcm-71.wav', { format: 'flac' }, 'flac', 8],
+    ['pcm-51.wav', { format: 'mp3' }, 'mp3', 2],
+    ['pcm-71.wav', { format: 'mp3' }, 'mp3', 2],
+  ] as const)('%s as %o → %s with %i channels', async (name, over, codec, channels) => {
+    const { info, outInfo } = await extract(name, null, over)
+    expect(outInfo.tracks).toHaveLength(1)
+    expect(outInfo.tracks[0]).toMatchObject({ kind: 'audio', codec, channels })
+    expect(outInfo.duration).toBeCloseTo(info.duration, 1)
+  })
+
+  // MP3 holds two channels at most. Mixed to 16-bit WAV here so the result can be read back.
+  it.each(['pcm-51.wav', 'pcm-71.wav'])('%s mixes down to stereo with the centre and surrounds in', async (name) => {
+    const source = fixture(name)
+    const info = await probe(source)
+    const plan: Plan = {
+      kind: 'audio',
+      container: 'wav',
+      name: 'mix.wav',
+      mimeType: 'audio/wav',
+      lossless: false,
+      keep: [audioId(info)],
+      audio: { codec: 'pcm-s16', numberOfChannels: 2 },
+    }
+    const output = new File([(await run(source, plan, null)).buffer!], plan.name)
+    const outInfo = await probe(output)
+    expect((outInfo.tracks[0] as AudioTrack).channels).toBe(2)
+
+    const channels = (info.tracks[0] as AudioTrack).channels
+    const before = int16(await packetBytes(source, audioId(info)))
+    const after = int16(await packetBytes(output, audioId(outInfo)))
+    expect(after.length / 2).toBe(before.length / channels)
+    let worst = 0
+    for (let i = 0; i < after.length / 2; i++) {
+      const [l, r] = stereoMix(before.subarray(i * channels, (i + 1) * channels))
+      worst = Math.max(worst, Math.abs(after[i * 2] - l), Math.abs(after[i * 2 + 1] - r))
+    }
+    expect(worst).toBeLessThanOrEqual(2)
   })
 })
 

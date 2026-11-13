@@ -145,8 +145,14 @@ describe('planExtractAudio, MP3', () => {
   it('mixes more than two channels down to stereo, which is all MP3 holds', () => {
     const surround = fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ channels: 6 })] })
     expect(plan(surround, { format: 'mp3' }).plan?.audio?.numberOfChannels).toBe(2)
+    expect(plan(surround, { format: 'mp3' }).caption).toBe('AAC re-encoded to MP3 at 192 kbps, mixed down to stereo.')
     const mono = fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ channels: 1 })] })
     expect(plan(mono, { format: 'mp3' }).plan?.audio?.numberOfChannels).toBe(1)
+    expect(plan(mono, { format: 'mp3' }).caption).toBe('AAC re-encoded to MP3 at 192 kbps.')
+    const surround16k = fakeInfo({ tracks: [fakeAudioTrack({ channels: 8, sampleRate: 16000 })] })
+    expect(plan(surround16k, { format: 'mp3' }).caption).toBe(
+      'AAC re-encoded to MP3 at 192 kbps, mixed down to stereo, resampled to 48 kHz.',
+    )
   })
 
   it('resamples rates MP3 can’t hold at full bitrate to 44.1 or 48 kHz, and says so', () => {

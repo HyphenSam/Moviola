@@ -6,7 +6,7 @@ import { CANT_OPEN, probe } from './probe'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
-// Every fixture is 4 s of 320×180 at 25 fps (scripts/fixtures.sh), with a 440 Hz tone where there's audio.
+// Every video fixture is 4 s of 320×180 at 25 fps (scripts/fixtures.sh), with a tone in each audio channel.
 const SMALL_H264 = { kind: 'video', codec: 'avc', codecString: 'avc1.64000c', width: 320, height: 180, rotation: 0 }
 
 const video = (info: MediaInfo) => info.tracks.filter((t): t is VideoTrack => t.kind === 'video')
@@ -30,7 +30,7 @@ describe('probe', () => {
       codec: 'aac',
       codecString: 'mp4a.40.2',
       sampleRate: 48000,
-      channels: 1,
+      channels: 2,
     })
     expect(audio(info)[0].bitrate).toBeGreaterThan(50_000)
   })
@@ -50,7 +50,7 @@ describe('probe', () => {
     const info = await probe(fixture('vp9-opus.webm'))
     expect(info.container).toBe('webm')
     expect(video(info)[0]).toMatchObject({ codec: 'vp9', width: 320, height: 180, frameRate: 25 })
-    expect(audio(info)[0]).toMatchObject({ codec: 'opus', sampleRate: 48000, channels: 1 })
+    expect(audio(info)[0]).toMatchObject({ codec: 'opus', sampleRate: 48000, channels: 2 })
   })
 
   it('reads AC-3, FLAC and PCM audio', async () => {
@@ -107,6 +107,29 @@ describe('probe', () => {
     expect(info.duration).toBeCloseTo(4, 2)
     expect(audio(info)[0]).toMatchObject({ codec: 'flac', sampleRate: 48000, channels: 1 })
     expect(audio(info)[0].bitrate).toBeGreaterThan(100_000)
+  })
+
+  it.each([
+    ['aac.m4a', [1]],
+    ['h264-pcm.mov', [1]],
+    ['h264-aac.mp4', [2]],
+    ['h264-aac.ts', [2]],
+    ['vp9-opus.webm', [2]],
+    ['h264-flac.mkv', [2]],
+    ['h264-aac-2audio.mkv', [2, 6]],
+    ['h264-ac3.mkv', [6]],
+    ['opus-51.webm', [6]],
+    ['pcm-51.wav', [6]],
+    ['pcm-71.wav', [8]],
+  ])('reads how many channels %s’s audio has: %j', async (name, channels) => {
+    expect(audio(await probe(fixture(name))).map((t) => t.channels)).toEqual(channels)
+  })
+
+  it('reads a bare WAV file', async () => {
+    const info = await probe(fixture('pcm-71.wav'))
+    expect(info).toMatchObject({ container: 'wav', start: 0 })
+    expect(info.duration).toBeCloseTo(1, 2)
+    expect(audio(info)[0]).toMatchObject({ codec: 'pcm-s16', sampleRate: 16000, bitDepth: 16 })
   })
 
   it.each([

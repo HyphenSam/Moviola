@@ -163,7 +163,9 @@ Gets the audio out of a video, losslessly by default.
   lost." Badge: Lossless.
 - **MP3**: bitrate segmented 128 / 192 / 256 / 320 kbps (default 192), CBR. Uses the browser's
   encoder if `canEncodeAudio('mp3')`, else registers `@mediabunny/mp3-encoder`. Badge: Re-encodes,
-  caption "AAC re-encoded to MP3 at 192 kbps." More than two channels are mixed down to stereo. MP3
+  caption "AAC re-encoded to MP3 at 192 kbps." More than two channels are mixed down to stereo (the
+  centre and surrounds at √½ into their side, the LFE left out), and the caption adds ", mixed down
+  to stereo". MP3
   reaches 320 kbps only at 32, 44.1 and 48 kHz (lower rates top out at 160 kbps, higher ones it can't
   hold), so other rates are resampled to 44.1 kHz (multiples of 11.025 kHz) or 48 kHz, and the
   caption adds ", resampled to 48 kHz". If the source is already MP3, a hint says "Already MP3:
@@ -379,22 +381,25 @@ sentence naming the actual codec, container or number involved.
 
 ## 11. Fixtures (`fixtures/`, made by `scripts/fixtures.sh`)
 
-Small (each under 300 kB, a few seconds long), generated with ffmpeg's `testsrc2` and `sine`
-sources, committed. At least:
+Small (each under 300 kB, a few seconds long), generated with ffmpeg's `testsrc2`, `sine` and
+`aevalsrc` sources, committed. Multichannel audio has a different pitch in each channel, so a dropped
+or swapped channel shows. At least:
 
 | File | Contents | Used for |
 |---|---|---|
-| `h264-aac.mp4` | H.264 + AAC, keyframe every 2 s | most tools, fast trim snapping |
-| `h264-aac-2audio.mkv` | H.264 + two AAC tracks (eng, fra) | track lists, remove audio keeping one |
-| `vp9-opus.webm` | VP9 + Opus | extract to .opus, container change to MP4 |
-| `h264-ac3.mkv` | H.264 + AC-3 | extract to .mka, WebM refusal |
+| `h264-aac.mp4` | H.264 + stereo AAC, keyframe every 2 s | most tools, fast trim snapping |
+| `h264-aac-2audio.mkv` | H.264 + two AAC tracks (eng stereo, fra 5.1) | track lists, remove audio keeping one |
+| `vp9-opus.webm` | VP9 + stereo Opus | extract to .opus, container change to MP4 |
+| `opus-51.webm` | 5.1 Opus only (channel mapping family 1) | 5.1 Opus copied into Ogg |
+| `h264-ac3.mkv` | H.264 + 5.1 AC-3 | extract to .mka, WebM refusal |
 | `h264-mp3.mov` | H.264 + MP3 | extract to .mp3 (copied); Mediabunny 1.65 can't name MOV's `.mp3` entry yet, so for now Extract audio says it can't tell the codec |
-| `h264-pcm.mov` | H.264 + PCM s16le | extract to .wav |
-| `h264-flac.mkv` | H.264 + FLAC | extract to .flac |
+| `h264-pcm.mov` | H.264 + mono PCM s16le | extract to .wav |
+| `h264-flac.mkv` | H.264 + stereo FLAC | extract to .flac |
 | `h264-only.mp4` | H.264, no audio | Extract audio dimmed |
 | `rotated.mp4` | H.264 with 90° rotation metadata | display size, frame grab |
 | `h264-aac.ts` | `h264-aac.mp4` in MPEG-TS, starting near 1.4 s | non-zero start, the fallback preview |
-| `aac.m4a` | AAC audio only | audio-only behaviour |
+| `aac.m4a` | mono AAC audio only | audio-only behaviour |
+| `pcm-51.wav`, `pcm-71.wav` | 5.1 and 7.1 PCM s16le, 1 s at 16 kHz | surround conversions end to end in Node, the stereo mixdown |
 | `flac.flac` | FLAC audio only | a bare FLAC file's length (Mediabunny misreads it if probed carelessly) |
 | `flac-24.flac` | 24-bit FLAC audio only | bit depth from STREAMINFO; 16-bit WAV of it isn't lossless |
 | `notvideo.txt` | text | the "can't open" message |

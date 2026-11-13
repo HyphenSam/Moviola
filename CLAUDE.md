@@ -124,6 +124,9 @@ discarded.
 - Opus in WebM starts before 0 (pre-roll, −7 ms in the fixture) and Ogg can't, so copies use
   `shiftTolerance: Infinity`; Mediabunny keeps the tracks in sync when it shifts.
 - AAC packets read from MPEG-TS keep their ADTS headers; MP4 stores the frames without them.
+- Mediabunny mixes 5.1 down to stereo properly but has no rule for 7.1 (it keeps only the front pair,
+  losing the centre's dialogue), so `run.ts` mixes 7.1 itself in `process`. Its WAV writer has no
+  channel mask, so players infer 5.1 or 7.1 from the channel count.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
 

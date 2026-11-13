@@ -123,7 +123,14 @@ export function planExtractAudio(
         numberOfChannels: Math.min(track.channels, 2),
         ...(sampleRate && { sampleRate }),
       }),
-      caption: `${codec} re-encoded to MP3 at ${settings.mp3Bitrate} kbps${sampleRate ? `, resampled to ${sampleRate / 1000} kHz` : ''}.`,
+      caption: [
+        `${codec} re-encoded to MP3 at ${settings.mp3Bitrate} kbps`,
+        track.channels > 2 && 'mixed down to stereo',
+        sampleRate && `resampled to ${sampleRate / 1000} kHz`,
+      ]
+        .filter(Boolean)
+        .join(', ')
+        .concat('.'),
       ...(track.codec === 'mp3' && { hints: ['Already MP3: Original keeps it without loss.'] }),
     }
   }
