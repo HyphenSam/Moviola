@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+
+/* Zinc neutrals and one amber accent (primary action, selection, progress,
+   trim range). The stage is near-black in both themes so the picture can be
+   judged. Light and dark follow the system. src/contrast.test.ts checks the
+   pairs DESIGN.md names; run it after changing any colour. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-canvas: oklch(0.975 0.002 286);
+  --color-panel: oklch(1 0 0);
+  --color-sunken: oklch(0.955 0.003 286);
+  --color-line: oklch(0.905 0.005 286);
+  --color-line-strong: oklch(0.83 0.008 286);
+  --color-ink: oklch(0.21 0.006 286);
+  --color-ink-soft: oklch(0.45 0.012 286);
+  --color-ink-faint: oklch(0.6 0.01 286);
+  /* Amber light enough to read as amber can't hold white text at AA, so text
+     on it is dark ink. This one is deep enough to keep 3:1 on white panels. */
+  --color-accent: oklch(0.66 0.16 55);
+  --color-accent-hover: oklch(0.62 0.16 52);
+  --color-accent-ink: oklch(0.21 0.006 286);
+  --color-accent-soft: oklch(0.95 0.035 70);
+  --color-accent-text: oklch(0.52 0.11 58);
+  --color-focus: oklch(0.52 0.11 58);
+  --color-danger: oklch(0.55 0.2 25);
+  --color-danger-soft: oklch(0.96 0.03 25);
+  --color-ok: oklch(0.55 0.13 155);
+
+  /* The stage and what sits on it: the same in spirit in both themes. */
+  --color-stage: oklch(0.18 0.003 286);
+  --color-stage-ink: oklch(0.9 0.003 286);
+  --color-stage-ink-soft: oklch(0.72 0.006 286);
+  --color-stage-line: oklch(0.52 0.006 286);
+
+  --radius-control: 8px;
+  --radius-panel: 12px;
+
+  --shadow-float: 0 1px 2px oklch(0 0 0 / 0.06), 0 6px 20px -4px oklch(0 0 0 / 0.14);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: oklch(0.165 0.004 286);
+    --color-panel: oklch(0.2 0.005 286);
+    --color-sunken: oklch(0.235 0.006 286);
+    --color-line: oklch(0.275 0.006 286);
+    --color-line-strong: oklch(0.36 0.008 286);
+    --color-ink: oklch(0.965 0.002 286);
+    --color-ink-soft: oklch(0.74 0.01 286);
+    --color-ink-faint: oklch(0.6 0.01 286);
+    /* Brighter amber on dark panels; hover brightens. Text on it stays dark ink. */
+    --color-accent: oklch(0.78 0.15 70);
+    --color-accent-hover: oklch(0.82 0.14 72);
+    --color-accent-ink: oklch(0.21 0.006 286);
+    --color-accent-soft: oklch(0.3 0.05 60);
+    --color-accent-text: oklch(0.82 0.13 75);
+    --color-focus: oklch(0.82 0.13 75);
+    --color-danger: oklch(0.68 0.18 25);
+    --color-danger-soft: oklch(0.28 0.06 25);
+    --color-ok: oklch(0.72 0.14 155);
+    --color-stage: oklch(0.13 0.003 286);
+    --shadow-float: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px -4px oklch(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  a {
+    color: var(--color-accent-text);
+    text-underline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
