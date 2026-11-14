@@ -281,7 +281,9 @@ Re-encodes to make the file smaller, optionally resized.
     the export says so in danger text ("6% over the 10 MB target.", rounded up).
 - **Resolution** (segmented): Original, 1080p, 720p, 480p. The number is the shorter side (so it
   works for portrait video), never scales up (options above the source are disabled), keeps the
-  aspect ratio, rounds down to even numbers.
+  aspect ratio, rounds down to even numbers. Frames are resized with WebGL where the browser has it in
+  workers (Mediabunny's 2D canvas otherwise), which is several times faster where frames are decoded
+  on the GPU.
 - **Frame rate** (segmented): Original, 30, 24. Never raises it: a cap at or above the source's rate
   is disabled. A source whose rate isn't known (variable) can be capped. Hidden behind "More
   options".
@@ -291,8 +293,8 @@ Re-encodes to make the file smaller, optionally resized.
   the disabled ones are named under the control: "Not available in this browser: HEVC, AV1." A
   codec that becomes unavailable falls back to the first that is. Captions: H.264 "Plays
   everywhere."; HEVC "Smaller files. Plays on most phones and Macs, but not in every browser."; VP9
-  "A WebM file. Plays in browsers, less widely elsewhere."; AV1 "The smallest files, and the slowest
-  to make. Plays on newer devices."
+  "A WebM file. Plays in browsers, less widely elsewhere. Slow to make in some browsers."; AV1 "The
+  smallest files, and the slowest to make. Plays on newer devices."
 - **Audio** (segmented, shown only when there is audio): "Keep" (default), "Smaller", "Remove". Every
   audio track is kept. Keep copies them when the output container holds all their codecs, otherwise
   encodes them at 128 kbps (AAC in MP4, Opus in WebM). Smaller encodes at 96 kbps. Encoding mixes

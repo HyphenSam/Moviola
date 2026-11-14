@@ -85,7 +85,7 @@ const CODEC_LABELS: Record<VideoEncodeCodec, string> = { avc: 'H.264', hevc: 'HE
 const CODEC_CAPTIONS: Record<VideoEncodeCodec, string> = {
   avc: 'Plays everywhere.',
   hevc: 'Smaller files. Plays on most phones and Macs, but not in every browser.',
-  vp9: 'A WebM file. Plays in browsers, less widely elsewhere.',
+  vp9: 'A WebM file. Plays in browsers, less widely elsewhere. Slow to make in some browsers.',
   av1: 'The smallest files, and the slowest to make. Plays on newer devices.',
 }
 // Where each codec goes: MP4 for all but VP9, which goes in WebM (SPEC.md 6.6).

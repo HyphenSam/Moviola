@@ -164,11 +164,16 @@ describe('codec', () => {
     })
   })
 
-  it('offers the codecs this browser can encode at the chosen size, H.264 with its caption', () => {
+  it('offers the codecs this browser can encode at the chosen size, each with its caption', () => {
     expect(codecOptions(without({ hevc: false, av1: false }))).toEqual([
       { value: 'avc', label: 'H.264', disabled: false, caption: 'Plays everywhere.' },
       { value: 'hevc', label: 'HEVC', disabled: true, caption: expect.any(String) },
-      { value: 'vp9', label: 'VP9', disabled: false, caption: expect.any(String) },
+      {
+        value: 'vp9',
+        label: 'VP9',
+        disabled: false,
+        caption: 'A WebM file. Plays in browsers, less widely elsewhere. Slow to make in some browsers.',
+      },
       { value: 'av1', label: 'AV1', disabled: true, caption: expect.any(String) },
     ])
   })

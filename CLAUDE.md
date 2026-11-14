@@ -80,7 +80,8 @@ is lossless or re-encodes.
   `format-bytes.ts`.
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails, frame grabs and GIF
-  frames), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them).
+  frames), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
+  `gpu-scaler.ts` (resizes frames with WebGL for Mediabunny; the maths is in `src/lib/scale.ts`).
 - `src/worker/` the Web Worker: receives a `File` and a `Plan`, runs it with `src/media/`, posts
   progress, cancels on request.
 - `src/components/` the UI (`ui/` holds the primitives). `src/App.tsx` puts it together; it takes the
@@ -146,9 +147,12 @@ discarded.
 - Firefox on Windows has no HEVC in WebCodecs, encoding or decoding, even with `media.hevc.enabled`
   and `dom.media.webcodecs.h265.enabled` set and Microsoft's HEVC extension installed; `<video>` plays it.
 - Headed Firefox decodes on the GPU, and Mediabunny resizes each frame through a 2D canvas (twice past a
-  2× downscale, for mipmapping): about 22 ms a frame at 720p and 40 ms at 480p, so a downscaled Compress
-  is slower than Original there (76 s and 111 s against 42 s on 90 s of 1080p). A WebGL scaler (one
-  textured draw) takes about 5 ms. Headless Firefox decodes in software, which hides most of this.
+  2× downscale, for mipmapping): about 22 ms a frame at 720p and 40 ms at 480p, which made a downscaled
+  Compress slower than Original there (76 s and 111 s against 42 s on 90 s of 1080p). So the worker
+  registers `gpu-scaler.ts` as a Mediabunny transformer: one textured WebGL draw, about 5 ms, bringing
+  those to 26 s and 17 s; Chrome's times don't change (within half a second). It takes plain resizes of
+  the whole frame and returns `null` for anything else, and Mediabunny's canvas is the fallback where
+  WebGL 2 is missing. Headless Firefox decodes in software, which hides most of the cost.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
 
