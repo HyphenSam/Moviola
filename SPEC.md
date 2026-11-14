@@ -226,12 +226,15 @@ Cuts out a range.
 Rewraps the streams in another container without touching them.
 
 - **Container** (segmented): MP4, MOV, MKV, WebM. The source's own container is shown but disabled
-  ("Already MKV").
+  ("Already MKV."). The default is MP4, or MKV for an MP4 source; the choice carries over to the next
+  file.
 - **Tracks**: every track with a checkbox (codec, language, name). Tracks the chosen container can
   hold are ticked; tracks it can't hold are unticked, disabled and say why ("WebM can't hold H.264").
+- Unticking a track the container holds leaves it out. Unticking the video on purpose writes the audio on
+  its own (`.m4a` from MP4); unticking everything is a problem ("Tick at least one track to keep.").
 - If no video track survives, problem: "WebM can't hold this video's H.264. Use Compress to convert
   it to VP9 or AV1." (worded from the actual codecs).
-- `copy: { mode: 'forced' }`. Badge: Lossless.
+- `copy: { mode: 'forced' }`. Action "Rewrap". Badge: Lossless.
 - Subtitle tracks other than WebVTT can't be read by Mediabunny; if the info shows none but the user
   expects some, that's why. Note it once under the track list when the source is MKV: "Subtitles
   other than WebVTT aren't carried over."
@@ -247,7 +250,8 @@ Copies the video without its sound.
 - If there are several: a list of audio tracks with "Keep" checkboxes, all unticked (so the default
   removes all audio; ticking keeps a language, for example).
 - Subtitles are kept. Container: the source's (fallbacks as Trim). `copy: { mode: 'forced' }`.
-  Badge: Lossless.
+  Action "Remove audio". Badge: Lossless. Ticking every audio track is a problem: "Every audio track is
+  ticked, so nothing would be removed."
 - Output name: `<stem> (no audio).<ext>`, or `<stem> (edited).<ext>` when some audio was kept.
 
 ### 6.6 Compress

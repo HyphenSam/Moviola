@@ -1,10 +1,22 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BlobSource, EncodedPacketSink, Input, ALL_FORMATS, Quality } from 'mediabunny'
+import {
+  ALL_FORMATS,
+  BlobSource,
+  BufferTarget,
+  Conversion,
+  EncodedPacketSink,
+  Input,
+  MkvOutputFormat,
+  Output,
+  Quality,
+} from 'mediabunny'
 import { describe, expect, it } from 'vitest'
 import type { AudioTrack, MediaInfo } from '@/lib/info'
 import { DEFAULT_EXTRACT_AUDIO, planExtractAudio, type ExtractAudioSettings } from '@/lib/plans/extract-audio'
 import type { Plan } from '@/lib/plan'
+import { planChangeContainer, type ContainerChoice } from '@/lib/plans/change-container'
+import { planRemoveAudio } from '@/lib/plans/remove-audio'
 import { planTrim, type TimeRange, type TrimMode } from '@/lib/plans/trim'
 import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
@@ -423,5 +435,111 @@ describe('videoOptions', () => {
       forceTranscode: true,
       hardwareAcceleration: 'no-preference',
     })
+  })
+})
+
+/** Runs a planner's plan on `source` and reads the result back. */
+async function runPlanned(source: File, planned: { plan?: Plan; problems?: string[] }) {
+  if (!planned.plan) throw new Error(planned.problems!.join(' '))
+  const result = await run(source, planned.plan, null)
+  const output = new File([result.buffer!], planned.plan.name)
+  return { plan: planned.plan, output, outInfo: await probe(output) }
+}
+
+/** Every packet of each kept source track is in the output's track of the same kind and order, byte
+ * for byte, and every track keeps its timing against the others. */
+async function expectSamePackets(source: File, info: MediaInfo, keep: number[], output: File, outInfo: MediaInfo) {
+  const kept = info.tracks.filter((t) => keep.includes(t.id))
+  expect(outInfo.tracks.map((t) => [t.kind, t.codec])).toEqual(kept.map((t) => [t.kind, t.codec]))
+  const shifts: number[] = []
+  for (const [i, track] of kept.entries()) {
+    const before = await packets(source, track.id)
+    const after = await packets(output, outInfo.tracks[i].id)
+    expect(before.length).toBeGreaterThan(10)
+    expect(after.length).toBe(before.length)
+    expect(after.every((p, j) => p.data.equals(before[j].data))).toBe(true)
+    const shift = after[0].timestamp - before[0].timestamp
+    expect(after.every((p, j) => Math.abs(p.timestamp - before[j].timestamp - shift) < 1e-3)).toBe(true)
+    shifts.push(shift)
+  }
+  // Mediabunny's MKV writer can't start before 0, so AAC's priming (−21 ms) moves every track 21 ms
+  // later, together; nothing else moves.
+  expect(shifts.every((s) => Math.abs(s - shifts[0]) < 1e-3)).toBe(true)
+  expect(Math.abs(shifts[0])).toBeLessThan(0.025)
+}
+
+async function changeContainer(source: File, container: ContainerChoice, dropped: number[] = []) {
+  const info = await probe(source)
+  const done = await runPlanned(source, planChangeContainer(info, container, dropped, CONTAINER_CODECS))
+  return { info, ...done }
+}
+
+// SPEC.md 6.4, end to end: nothing is re-encoded, so it runs in Node.
+describe('change container', () => {
+  it('rewraps vp9-opus.webm as MP4, every packet untouched', async () => {
+    const source = fixture('vp9-opus.webm')
+    const { info, plan, output, outInfo } = await changeContainer(source, 'mp4')
+    expect(plan.name).toBe('vp9-opus.mp4')
+    expect(outInfo.container).toBe('mp4')
+    await expectSamePackets(source, info, plan.keep, output, outInfo)
+    expect(outInfo.duration).toBeCloseTo(info.duration, 1)
+  })
+
+  it('rewraps h264-aac.mp4 as MKV and back again, every packet untouched both ways', async () => {
+    const source = fixture('h264-aac.mp4')
+    const there = await changeContainer(source, 'mkv')
+    expect(there.plan.name).toBe('h264-aac.mkv')
+    expect(there.outInfo.container).toBe('mkv')
+    await expectSamePackets(source, there.info, there.plan.keep, there.output, there.outInfo)
+
+    const back = await changeContainer(there.output, 'mp4')
+    expect(back.plan.name).toBe('h264-aac.mp4')
+    expect(back.outInfo.container).toBe('mp4')
+    await expectSamePackets(source, there.info, there.plan.keep, back.output, back.outInfo)
+    expect(back.outInfo.duration).toBeCloseTo(there.info.duration, 1)
+  })
+
+  it('refuses to put h264-ac3.mkv into WebM, naming its codec and the way out', async () => {
+    const info = await probe(fixture('h264-ac3.mkv'))
+    expect(planChangeContainer(info, 'webm', [], CONTAINER_CODECS).problems).toEqual([
+      'WebM can’t hold this video’s H.264. Use Compress to convert it to VP9 or AV1.',
+    ])
+  })
+
+  it('copies the metadata tags', async () => {
+    // The fixtures carry no tags, so give one a title first.
+    const tagged = new Output({ format: new MkvOutputFormat(), target: new BufferTarget() })
+    const input = new Input({ source: new BlobSource(fixture('h264-aac.mp4')), formats: ALL_FORMATS })
+    const conversion = await Conversion.init({ input, output: tagged, tags: { title: 'Harbour at dusk' } })
+    await conversion.execute()
+    const source = new File([(tagged.target as BufferTarget).buffer!], 'tagged.mkv')
+    expect((await probe(source)).tags.title).toBe('Harbour at dusk')
+
+    const { outInfo } = await changeContainer(source, 'mp4')
+    expect(outInfo.tags.title).toBe('Harbour at dusk')
+  })
+})
+
+// SPEC.md 6.5, end to end.
+describe('remove audio', () => {
+  it('copies h264-aac.mp4’s video without its sound', async () => {
+    const source = fixture('h264-aac.mp4')
+    const info = await probe(source)
+    const { plan, output, outInfo } = await runPlanned(source, planRemoveAudio(info, [], CONTAINER_CODECS))
+    expect(plan.name).toBe('h264-aac (no audio).mp4')
+    expect(outInfo.container).toBe('mp4')
+    await expectSamePackets(source, info, plan.keep, output, outInfo)
+  })
+
+  it('keeps only the French track of h264-aac-2audio.mkv', async () => {
+    const source = fixture('h264-aac-2audio.mkv')
+    const info = await probe(source)
+    const french = info.tracks.find((t) => t.kind === 'audio' && t.language === 'fra')!
+    const { plan, output, outInfo } = await runPlanned(source, planRemoveAudio(info, [french.id], CONTAINER_CODECS))
+    expect(plan.name).toBe('h264-aac-2audio (edited).mkv')
+    expect(outInfo.container).toBe('mkv')
+    await expectSamePackets(source, info, plan.keep, output, outInfo)
+    const audio = outInfo.tracks.filter((t): t is AudioTrack => t.kind === 'audio')
+    expect(audio.map((t) => [t.language, t.channels])).toEqual([['fra', 6]])
   })
 })

@@ -6,6 +6,9 @@ export function stem(name: string): string {
   return dot > 0 ? name.slice(0, dot) : name
 }
 
+/** The source's last extension, as written, or null when it has none. */
+export const extensionOf = (name: string) => (stem(name) === name ? null : name.slice(stem(name).length + 1))
+
 // Windows refuses these in file names; times use `-` for `:` instead.
 const sanitise = (part: string) => part.replaceAll(':', '-').replace(/[<>"/\\|?*]/g, '')
 

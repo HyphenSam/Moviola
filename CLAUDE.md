@@ -122,6 +122,9 @@ discarded.
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream
   commits it. `run.ts` wraps the stream so only a finished output closes it; anything else aborts.
+- Mediabunny's MKV writer can't start before 0 either, so MP4's AAC priming (−21 ms) moves every track
+  21 ms later when copied into MKV. The tracks stay in sync and the packets are untouched; the Node tests
+  check that every track shifts by the same amount.
 - Opus in WebM starts before 0 (pre-roll, −7 ms in the fixture) and Ogg can't, so copies use
   `shiftTolerance: Infinity`; Mediabunny keeps the tracks in sync when it shifts.
 - AAC packets read from MPEG-TS keep their ADTS headers; MP4 stores the frames without them.

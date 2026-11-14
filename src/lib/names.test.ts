@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { outputName, stem, uniqueName } from './names'
+import { extensionOf, outputName, stem, uniqueName } from './names'
 
 describe('stem', () => {
   it('drops the last extension only', () => {
@@ -10,6 +10,15 @@ describe('stem', () => {
   it('keeps a name with no extension, or one that only starts with a dot', () => {
     expect(stem('clip')).toBe('clip')
     expect(stem('.hidden')).toBe('.hidden')
+  })
+})
+
+describe('extensionOf', () => {
+  it('is the last extension, or null when there is none', () => {
+    expect(extensionOf('clip.M4V')).toBe('M4V')
+    expect(extensionOf('take.2.final.mov')).toBe('mov')
+    expect(extensionOf('clip')).toBeNull()
+    expect(extensionOf('.hidden')).toBeNull()
   })
 })
 

@@ -1,7 +1,7 @@
 import type { Capabilities, VideoEncodeCodec } from '../capabilities'
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
 import { codecName, hasAudio, videoTrack, type MediaInfo, type Track } from '../info'
-import { outputName, stem } from '../names'
+import { extensionOf, outputName } from '../names'
 import type { Plan, Planned } from '../plan'
 import { formatTimecode, frameDuration } from '../timecode'
 
@@ -39,9 +39,6 @@ export function keyframeNote(start: number, keyframe: number | null, frameRate: 
   const before = (start - keyframe).toFixed(2)
   return `Starts at ${formatTimecode(keyframe)}, the nearest keyframe, ${before} s before your in point.`
 }
-
-/** The source's extension, when it has one. */
-const extensionOf = (name: string) => (stem(name) === name ? null : name.slice(stem(name).length + 1))
 
 /** Trim (SPEC.md 6.3): every track cut to the range. Fast copies everything, so the video starts on
  * the keyframe at or before the in point; Precise re-encodes the video so it starts on the exact frame,

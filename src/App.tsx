@@ -2,12 +2,14 @@ import { Download, X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
+import { ChangeContainerView } from './components/ChangeContainerView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { ExtractAudioView } from './components/ExtractAudioView'
 import { FileCard } from './components/FileCard'
 import { JobAction } from './components/JobAction'
 import { Logo } from './components/Logo'
 import { MediaInfoView } from './components/MediaInfoView'
+import { RemoveAudioView } from './components/RemoveAudioView'
 import { Stage } from './components/Stage'
 import { ToolRail } from './components/ToolRail'
 import { TrimView } from './components/TrimView'
@@ -22,13 +24,26 @@ import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
 import type { Planned } from './lib/plan'
+import {
+  containerTracks,
+  defaultContainer,
+  planChangeContainer,
+  subtitleNote,
+  type ContainerChoice,
+} from './lib/plans/change-container'
 import { DEFAULT_EXTRACT_AUDIO, defaultAudioTrack, formatProblems, planExtractAudio } from './lib/plans/extract-audio'
+import { planRemoveAudio } from './lib/plans/remove-audio'
 import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
 import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
 import { hasVideo, videoTrack } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
+
+/** Track ids chosen for one file; another file starts with none. */
+type PerFile = { sourceId: number; ids: number[] } | null
+const idsFor = (chosen: PerFile, sourceId: number | undefined) =>
+  chosen && chosen.sourceId === sourceId ? chosen.ids : []
 
 /** The installed app's file handler hands files over here (manifest `file_handlers`). */
 type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(): Promise<File> }[] }) => void): void }
@@ -50,6 +65,11 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // whole file until the user picks one. Trim's mode carries over to the next file.
   const [ranged, setRanged] = useState<{ sourceId: number; range: TimeRange } | null>(null)
   const [trimMode, setTrimMode] = useState<TrimMode>('fast')
+  // Change container's choice carries over to the next file; the tracks unticked there, and the audio
+  // tracks Remove audio keeps, belong to one file.
+  const [rewrapTo, setRewrapTo] = useState<ContainerChoice | null>(null)
+  const [dropped, setDropped] = useState<PerFile>(null)
+  const [keptAudio, setKeptAudio] = useState<PerFile>(null)
   // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
   const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {} })
   useEffect(() => {
@@ -112,17 +132,37 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const keyframe = useKeyframe(client, fastVideo ? source.file : null, video?.id ?? null, range?.start ?? 0)
   const note = fastVideo && range ? keyframeNote(range.start, keyframe, video.frameRate) : null
 
+  // The source's own container can't be chosen; a choice carried over from a file in it falls back.
+  const rewrap =
+    source && rewrapTo && rewrapTo !== source.info.container ? rewrapTo : source && defaultContainer(source.info)
+  const droppedIds = idsFor(dropped, source?.id)
+  const keptAudioIds = idsFor(keptAudio, source?.id)
+  const toggle = (set: typeof setDropped, ids: number[], id: number, on: boolean) =>
+    source && set({ sourceId: source.id, ids: on ? [...ids, id] : ids.filter((i) => i !== id) })
+
   const planned: Planned | null = !source
     ? null
     : tool === 'extract-audio'
       ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, capabilities)
       : tool === 'trim'
         ? planTrim(source.info, range!, mode, CONTAINER_CODECS, capabilities)
-        : null
+        : tool === 'container'
+          ? planChangeContainer(source.info, rewrap!, droppedIds, CONTAINER_CODECS)
+          : tool === 'remove-audio'
+            ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
+            : null
   // An audio file is converted, not extracted from (SPEC.md section 6).
   const converting = !!source && !hasVideo(source.info)
   const [verb, doing] =
-    tool === 'trim' ? ['Trim', 'Trimming'] : converting ? ['Convert', 'Converting'] : ['Extract', 'Extracting']
+    tool === 'trim'
+      ? ['Trim', 'Trimming']
+      : tool === 'container'
+        ? ['Rewrap', 'Rewrapping']
+        : tool === 'remove-audio'
+          ? ['Remove audio', 'Removing audio']
+          : converting
+            ? ['Convert', 'Converting']
+            : ['Extract', 'Extracting']
   const memoryHint =
     source && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
@@ -237,6 +277,22 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                     onRange={(r) => updateRange(() => r)}
                     onSeek={player.seek}
                     onMode={setTrimMode}
+                  />
+                ) : tool === 'container' ? (
+                  <ChangeContainerView
+                    info={source.info}
+                    container={rewrap!}
+                    tracks={containerTracks(source.info, rewrap!, CONTAINER_CODECS)}
+                    dropped={droppedIds}
+                    note={subtitleNote(source.info)}
+                    onContainer={setRewrapTo}
+                    onTrack={(id, keep) => toggle(setDropped, droppedIds, id, !keep)}
+                  />
+                ) : tool === 'remove-audio' ? (
+                  <RemoveAudioView
+                    info={source.info}
+                    keep={keptAudioIds}
+                    onKeep={(id, keep) => toggle(setKeptAudio, keptAudioIds, id, keep)}
                   />
                 ) : (
                   <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>

@@ -15,7 +15,7 @@ Have ffmpeg on your PATH (phase 1 uses it to make test files).
 | 3 | Worker jobs, saving, Extract audio (lossless) | ☑ |
 | 4 | Extract audio: MP3, WAV, FLAC | ☑ |
 | 5 | Timeline and Trim | ☑ |
-| 6 | Change container, Remove audio | ☐ |
+| 6 | Change container, Remove audio | ☑ |
 | 7 | Compress | ☐ |
 | 8 | Grab frame, Make GIF | ☐ |
 | 9 | Polish, offline, accessibility, README | ☐ |
