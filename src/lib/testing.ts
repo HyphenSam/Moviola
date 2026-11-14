@@ -4,7 +4,7 @@ import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
 import type { Capabilities } from './capabilities'
 import type { AudioTrack, MediaInfo, VideoTrack } from './info'
 import type { Plan } from './plan'
-import type { RunResult, TargetSpec, WorkerCapabilities, WorkerClient } from './protocol'
+import type { RunResult, Size, TargetSpec, WorkerCapabilities, WorkerClient } from './protocol'
 
 /** A browser that can encode everything and save to disk. Tests take away what they need missing. */
 export const ALL_CAPABLE: Capabilities = {
@@ -86,13 +86,15 @@ export type FakeJob = {
 }
 
 /** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe.
- * It can encode what `capabilities` says: everything, unless told otherwise. Keyframes fall every 2 s,
+ * It can encode what `capabilities` says: everything, unless told otherwise; at a size other than
+ * 1080p, what `encodable(size)` says (the same, unless told otherwise). Keyframes fall every 2 s,
  * as in the fixtures; thumbnails come back blank (jsdom can't draw). `keyframes` and `thumbnailed`
  * list what was asked. Runs wait in `jobs` until the test finishes or fails them; cancelling rejects
  * as the worker does. */
 export function fakeClient(
   probe: (file: File) => MediaInfo | Promise<MediaInfo>,
   capabilities: WorkerCapabilities = ALL_CAPABLE,
+  encodable: (size: Size) => Capabilities['encodeVideo'] = () => capabilities.encodeVideo,
 ): WorkerClient & {
   probed: File[]
   jobs: FakeJob[]
@@ -109,6 +111,7 @@ export function fakeClient(
     keyframes,
     thumbnailed,
     capabilities: async () => ({ encodeVideo: capabilities.encodeVideo, encodeAudio: capabilities.encodeAudio }),
+    encodable: async (size) => encodable(size),
     keyframe: async (file, trackId, time) => {
       keyframes.push({ file, trackId, time })
       return Math.floor(time / 2) * 2

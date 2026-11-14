@@ -29,11 +29,20 @@ export type EncodeChecks = {
 // A check that throws (no encoder at all, say) is a no.
 const ask = (check: () => Promise<boolean>) => check().catch(() => false)
 
+/** Which video codecs this browser can encode at `size`. Compress asks again at the size it will
+ * write, since an encoder that manages 1080p may not manage another size (SPEC.md section 9). */
+export async function videoEncodersAt(
+  check: EncodeChecks['canEncodeVideo'],
+  size: { width: number; height: number },
+): Promise<Capabilities['encodeVideo']> {
+  const video = await Promise.all(VIDEO.map((c) => ask(() => check(c, size))))
+  return Object.fromEntries(VIDEO.map((c, i) => [c, video[i]]))
+}
+
 export async function probeCapabilities(checks: EncodeChecks): Promise<Omit<Capabilities, 'saveToDisk'>> {
-  const video = await Promise.all(VIDEO.map((c) => ask(() => checks.canEncodeVideo(c, { width: 1920, height: 1080 }))))
   const audio = await Promise.all(AUDIO.map((c) => ask(() => checks.canEncodeAudio(c))))
   return {
-    encodeVideo: Object.fromEntries(VIDEO.map((c, i) => [c, video[i]])),
+    encodeVideo: await videoEncodersAt(checks.canEncodeVideo, { width: 1920, height: 1080 }),
     encodeAudio: Object.fromEntries(AUDIO.map((c, i) => [c, audio[i] || (checks.wasm && ADD_ON_CODECS.includes(c))])),
   }
 }

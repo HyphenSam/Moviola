@@ -1,6 +1,6 @@
 import { canEncodeAudio, canEncodeVideo } from 'mediabunny'
-import { ADD_ON_CODECS, probeCapabilities, type AudioEncodeCodec } from '@/lib/capabilities'
-import type { WorkerCapabilities } from '@/lib/protocol'
+import { ADD_ON_CODECS, probeCapabilities, videoEncodersAt, type AudioEncodeCodec } from '@/lib/capabilities'
+import type { Size, WorkerCapabilities } from '@/lib/protocol'
 
 /** What this browser can encode. The add-ons count without being loaded: they run wherever
  * WebAssembly does, and loading them is left until a job needs one. */
@@ -10,6 +10,9 @@ export const capabilities = (): Promise<WorkerCapabilities> =>
     canEncodeAudio: (codec) => canEncodeAudio(codec),
     wasm: typeof WebAssembly === 'object',
   })
+
+/** Which video codecs this browser can encode at `size`. */
+export const encodableAt = (size: Size) => videoEncodersAt((codec, at) => canEncodeVideo(codec, at), size)
 
 // Each add-on is a few hundred kB of WebAssembly, so it's imported only when a job needs it, and
 // then only once.

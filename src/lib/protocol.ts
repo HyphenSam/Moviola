@@ -14,6 +14,7 @@ export type RunResult = { size: number; blob: Blob | null }
 export type Request =
   | { type: 'probe'; id: number; file: File }
   | { type: 'capabilities'; id: number }
+  | { type: 'encodable'; id: number; size: Size }
   | { type: 'keyframe'; id: number; file: File; trackId: number; time: number }
   | { type: 'thumbnails'; id: number; file: File; times: number[]; height: number }
   | { type: 'run'; id: number; file: File; plan: Plan; target: TargetSpec }
@@ -26,6 +27,8 @@ export type Reply =
 
 export type WorkerCapabilities = Omit<Capabilities, 'saveToDisk'>
 
+export type Size = { width: number; height: number }
+
 /** A running job. Cancelling makes `result` reject once the worker has stopped. */
 export type Job = { result: Promise<RunResult>; cancel(): void }
 
@@ -34,6 +37,8 @@ export type WorkerClient = {
   probe(file: File): Promise<MediaInfo>
   /** What this browser can encode; the page adds `saveToDisk`. */
   capabilities(): Promise<WorkerCapabilities>
+  /** Which video codecs this browser can encode at `size`. */
+  encodable(size: Size): Promise<Capabilities['encodeVideo']>
   /** The time of the keyframe at or before `time` in a video track, or null if there's none. Times
    * count from the playhead's 0 (MediaInfo `start`). */
   keyframe(file: File, trackId: number, time: number): Promise<number | null>
@@ -79,6 +84,7 @@ export function createClient(port: Port): WorkerClient {
   return {
     probe: (file) => send<MediaInfo>({ type: 'probe', id: nextId++, file }),
     capabilities: () => send<WorkerCapabilities>({ type: 'capabilities', id: nextId++ }),
+    encodable: (size) => send<Capabilities['encodeVideo']>({ type: 'encodable', id: nextId++, size }),
     keyframe: (file, trackId, time) => send<number | null>({ type: 'keyframe', id: nextId++, file, trackId, time }),
     thumbnails: (file, times, height) =>
       send<(ImageBitmap | null)[]>({ type: 'thumbnails', id: nextId++, file, times, height }),

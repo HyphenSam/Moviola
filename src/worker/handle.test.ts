@@ -40,6 +40,12 @@ describe('worker handle', () => {
     ])
   })
 
+  it('answers which video codecs can be encoded at a size; none in Node', async () => {
+    const replies: Reply[] = []
+    await handle({ type: 'encodable', id: 9, size: { width: 1280, height: 720 } }, (reply) => replies.push(reply))
+    expect(replies).toEqual([{ type: 'done', id: 9, value: { avc: false, hevc: false, vp9: false, av1: false } }])
+  })
+
   it.each([
     [3, 2],
     [2, 2],

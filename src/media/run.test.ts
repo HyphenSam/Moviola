@@ -429,6 +429,25 @@ describe('videoOptions', () => {
     })
   })
 
+  it('resizes to the plan’s display size and caps the frame rate, stretching nothing beyond the rounding', () => {
+    expect(videoOptions({ codec: 'hevc', bitrate: 474_000, width: 720, height: 1280, frameRate: 30 })).toEqual({
+      codec: 'hevc',
+      quality: new Quality({ bitrate: 474_000 }),
+      width: 720,
+      height: 1280,
+      fit: 'fill',
+      frameRate: 30,
+      forceTranscode: true,
+      hardwareAcceleration: 'no-preference',
+    })
+  })
+
+  it('holds the bitrate constant when the plan says so, for a target size', () => {
+    expect(videoOptions({ codec: 'avc', bitrate: 679_000, constantBitrate: true }).quality).toEqual(
+      new Quality({ bitrate: 679_000, bitrateMode: 'constant' }),
+    )
+  })
+
   it('leaves the quality to the encoder when the source’s bitrate isn’t known', () => {
     expect(videoOptions({ codec: 'vp9' })).toEqual({
       codec: 'vp9',

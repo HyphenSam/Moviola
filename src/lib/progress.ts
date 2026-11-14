@@ -1,4 +1,5 @@
 // Words and numbers for a running job and its result (DESIGN.md: Progress, Exports strip).
+import { formatSize } from './info'
 
 /** Rounded down, so 100% only shows once the job is done. */
 export const percent = (fraction: number) => `${Math.floor(fraction * 100)}%`
@@ -26,4 +27,22 @@ export function sizeChange(size: number, sourceSize: number): string | null {
   const shown = Math.trunc(change)
   if (shown === 0) return '±0%'
   return `${shown < 0 ? '−' : '+'}${Math.abs(shown)}%`
+}
+
+/** What Compress's export says about a result's size (SPEC.md 6.6): when it missed the target by
+ * more than 5% (single-pass encoding can), and when it came out larger than the source. */
+export function sizeWarnings(
+  size: number,
+  sourceSize: number,
+  target: number | null,
+): { overTarget: string | null; larger: string | null } {
+  const over = target ? (size - target) / target : 0
+  const grew = sourceSize > 0 ? (size - sourceSize) / sourceSize : 0
+  return {
+    overTarget: target && over > 0.05 ? `${Math.ceil(over * 100 - 1e-9)}% over the ${formatSize(target)} target.` : null,
+    larger:
+      grew > 0
+        ? `${Math.max(1, Math.round(grew * 100))}% larger than the original. ${target ? 'Try a smaller target.' : 'Try a lower quality.'}`
+        : null,
+  }
 }

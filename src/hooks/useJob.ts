@@ -9,6 +9,8 @@ export type Export = {
   name: string
   kind: Plan['kind']
   sourceSize: number
+  /** Compress's results are checked against the source and the target (Plan `sizeCheck`). */
+  sizeCheck?: Plan['sizeCheck']
 } & ({ size: number; url: string | null; error?: never } | { error: string; size?: never; url?: never })
 
 /** `doing` names the job for the progress bar: "Extracting". */
@@ -79,12 +81,16 @@ export function useJob(client: WorkerClient) {
       current.current = { ticket, cancel: job.cancel }
       setRunning({ doing, name, fraction: null, startedAt: Date.now() })
 
-      const settle = (result: Omit<Export, 'id' | 'name' | 'kind' | 'sourceSize'>) => {
+      const settle = (result: Omit<Export, 'id' | 'name' | 'kind' | 'sourceSize' | 'sizeCheck'>) => {
         if (current.current?.ticket !== ticket) return
         current.current = null
         setRunning(null)
         const id = nextExport.current++
-        setExports((list) => [{ id, name, kind: plan.kind, sourceSize: file.size, ...result } as Export, ...list])
+        const check = plan.sizeCheck && { sizeCheck: plan.sizeCheck }
+        setExports((list) => [
+          { id, name, kind: plan.kind, sourceSize: file.size, ...check, ...result } as Export,
+          ...list,
+        ])
       }
       job.result.then(
         ({ size, blob }) => settle({ size, url: blob ? URL.createObjectURL(blob) : null }),

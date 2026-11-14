@@ -134,6 +134,13 @@ discarded.
 - A copied trim into MP4 keeps the in point and writes the keyframe lead-in at negative times behind
   an edit list. `run.ts` moves the start back to the keyframe itself, so the cut is where the UI says.
 - `new Quality(n)` is a quality level from 0 to 1, not a bitrate; a bitrate is `new Quality({ bitrate })`.
+- A quality level (`new Quality('medium')`) makes Mediabunny encode at a fixed quantizer where the codec
+  allows, so the size follows the picture: a noisy 12 Mbps phone video at `'high'` came out 63% larger.
+  Compress passes the level's bitrate (`presetBitrate`) instead, and a constant bitrate for a target size.
+- An MP4 streamed to disk (`fastStart: 'reserve'`) carries a few hundred kB of reserved index space that
+  one built in memory doesn't (about 0.4 MB on 90 s of 30 fps video with audio).
+- Firefox's VP9 and AV1 encoders are slow (2–3× real time at 720p) and overshoot the bitrate they're
+  given (about 1.6× and 2.2× on noisy video); Chrome's land on it. Firefox has no HEVC encoder.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
 

@@ -87,12 +87,25 @@ function audioOptions(
   }
 }
 
-/** Mediabunny's options for re-encoding the plan's video. */
-export function videoOptions({ codec, bitrate }: NonNullable<Plan['video']>): ConversionVideoOptions {
+/** Mediabunny's options for re-encoding the plan's video. The plan's size is the display size, which
+ * is what Mediabunny resizes to; both sides are given (already even and in proportion), so `fill`
+ * only absorbs the rounding. */
+export function videoOptions({
+  codec,
+  bitrate,
+  constantBitrate,
+  width,
+  height,
+  frameRate,
+}: NonNullable<Plan['video']>): ConversionVideoOptions {
   return {
     codec,
     // A bare number would be a quality level (0 to 1), not bits per second.
-    ...(bitrate && { quality: new Quality({ bitrate }) }),
+    ...(bitrate && {
+      quality: new Quality(constantBitrate ? { bitrate, bitrateMode: 'constant' } : { bitrate }),
+    }),
+    ...(width && height && { width, height, fit: 'fill' as const }),
+    ...(frameRate && { frameRate }),
     forceTranscode: true,
     hardwareAcceleration: 'no-preference',
   }

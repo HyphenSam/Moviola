@@ -3,6 +3,7 @@ import { Tooltip } from 'radix-ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { ChangeContainerView } from './components/ChangeContainerView'
+import { CompressView } from './components/CompressView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { ExtractAudioView } from './components/ExtractAudioView'
 import { FileCard } from './components/FileCard'
@@ -14,11 +15,13 @@ import { Stage } from './components/Stage'
 import { ToolRail } from './components/ToolRail'
 import { TrimView } from './components/TrimView'
 import { Button } from './components/ui/Button'
+import { useEncodable } from './hooks/useEncodable'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
 import { canSaveToDisk, useJob } from './hooks/useJob'
 import { useKeyframe } from './hooks/useKeyframe'
 import { usePlayer } from './hooks/usePlayer'
 import { useSource } from './hooks/useSource'
+import { defaultTargetMB } from './lib/bitrate'
 import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
@@ -31,11 +34,20 @@ import {
   subtitleNote,
   type ContainerChoice,
 } from './lib/plans/change-container'
+import {
+  codecOptions,
+  DEFAULT_COMPRESS,
+  effectiveCompress,
+  frameRateOptions,
+  outputSize,
+  planCompress,
+  resolutionOptions,
+} from './lib/plans/compress'
 import { DEFAULT_EXTRACT_AUDIO, defaultAudioTrack, formatProblems, planExtractAudio } from './lib/plans/extract-audio'
 import { planRemoveAudio } from './lib/plans/remove-audio'
 import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
 import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
-import { hasVideo, videoTrack } from './lib/info'
+import { hasAudio, hasVideo, videoTrack } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
@@ -70,6 +82,10 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const [rewrapTo, setRewrapTo] = useState<ContainerChoice | null>(null)
   const [dropped, setDropped] = useState<PerFile>(null)
   const [keptAudio, setKeptAudio] = useState<PerFile>(null)
+  // Compress's settings carry over to the next file, apart from the target size, which starts at half
+  // of each file.
+  const [compressSettings, setCompressSettings] = useState(DEFAULT_COMPRESS)
+  const [target, setTarget] = useState<{ sourceId: number; mb: number } | null>(null)
   // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
   const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {} })
   useEffect(() => {
@@ -140,6 +156,19 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const toggle = (set: typeof setDropped, ids: number[], id: number, on: boolean) =>
     source && set({ sourceId: source.id, ids: on ? [...ids, id] : ids.filter((i) => i !== id) })
 
+  // Compress asks the encoders again at the size it will write (SPEC.md section 9); until the worker
+  // answers, the 1080p answer stands in.
+  const compressing = !!source && tool === 'compress'
+  const targetMB = source ? (target?.sourceId === source.id ? target.mb : defaultTargetMB(source.info.size)) : 0
+  const chosenCompress = { ...compressSettings, targetMB }
+  const compressSize =
+    compressing && video
+      ? outputSize(source.info, effectiveCompress(source.info, chosenCompress, capabilities).resolution)
+      : null
+  const encodableHere = useEncodable(client, compressSize)
+  const compressCaps: Capabilities = { ...capabilities, encodeVideo: encodableHere ?? capabilities.encodeVideo }
+  const compressNow = source ? effectiveCompress(source.info, chosenCompress, compressCaps) : null
+
   const planned: Planned | null = !source
     ? null
     : tool === 'extract-audio'
@@ -150,7 +179,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           ? planChangeContainer(source.info, rewrap!, droppedIds, CONTAINER_CODECS)
           : tool === 'remove-audio'
             ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
-            : null
+            : tool === 'compress'
+              ? planCompress(source.info, chosenCompress, CONTAINER_CODECS, compressCaps)
+              : null
   // An audio file is converted, not extracted from (SPEC.md section 6).
   const converting = !!source && !hasVideo(source.info)
   const [verb, doing] =
@@ -160,9 +191,11 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
         ? ['Rewrap', 'Rewrapping']
         : tool === 'remove-audio'
           ? ['Remove audio', 'Removing audio']
-          : converting
-            ? ['Convert', 'Converting']
-            : ['Extract', 'Extracting']
+          : tool === 'compress'
+            ? ['Compress', 'Compressing']
+            : converting
+              ? ['Convert', 'Converting']
+              : ['Extract', 'Extracting']
   const memoryHint =
     source && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
@@ -293,6 +326,18 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                     info={source.info}
                     keep={keptAudioIds}
                     onKeep={(id, keep) => toggle(setKeptAudio, keptAudioIds, id, keep)}
+                  />
+                ) : tool === 'compress' ? (
+                  <CompressView
+                    settings={compressNow!}
+                    resolutions={resolutionOptions(source.info)}
+                    frameRates={frameRateOptions(source.info)}
+                    codecs={codecOptions(compressCaps)}
+                    hasAudio={hasAudio(source.info)}
+                    onChange={({ targetMB: mb, ...change }) => {
+                      if (mb != null) setTarget({ sourceId: source.id, mb })
+                      setCompressSettings((s) => ({ ...s, ...change }))
+                    }}
                   />
                 ) : (
                   <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>

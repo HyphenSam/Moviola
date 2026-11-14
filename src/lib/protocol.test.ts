@@ -38,6 +38,15 @@ describe('createClient', () => {
     await expect(result).resolves.toEqual(value)
   })
 
+  it('asks which video codecs can be encoded at a size', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const result = client.encodable({ width: 720, height: 1280 })
+    expect(sent).toEqual([{ type: 'encodable', id: 1, size: { width: 720, height: 1280 } }])
+    reply({ type: 'done', id: 1, value: { avc: true, hevc: false } })
+    await expect(result).resolves.toEqual({ avc: true, hevc: false })
+  })
+
   it('asks for the keyframe at or before a time in a track, and resolves with its time', async () => {
     const { port, sent, reply } = fakePort()
     const client = createClient(port)

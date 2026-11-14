@@ -259,32 +259,54 @@ Copies the video without its sound.
 Re-encodes to make the file smaller, optionally resized.
 
 - **Aim** (segmented): "Quality" (default) or "Target size".
-  - **Quality**: "Smaller", "Balanced" (default), "High", mapped to Mediabunny's `QUALITY_LOW`,
-    `QUALITY_MEDIUM`, `QUALITY_HIGH` for video. If the source's video bitrate is lower than what the
-    preset would use, the preset is capped at the source bitrate and a hint warns "This video is
-    already compact; the result may not be much smaller."
+  - **Quality**: "Smaller", "Balanced" (default), "High": the bitrates Mediabunny gives its `low`,
+    `medium` and `high` quality levels for the codec at the output size (`presetBitrate` repeats
+    Mediabunny's private sum; a Node test checks they agree). They're passed as bitrates, not as
+    quality levels: a quality level makes Mediabunny encode at a fixed quantizer, whose size depends
+    on the picture, and a noisy phone video at High came out 63% larger than it went in. If the
+    source's video bitrate is lower than the preset's, the preset is capped at the source bitrate and
+    a hint warns "This video is already compact; the result may not be much smaller."
   - **Target size**: a number field in MB (decimal: 1 MB = 1,000,000 bytes), default half the source
     rounded to a whole MB, with quick picks 8 / 10 / 25 / 50 MB. Maths in `bitrate.ts`:
     `videoBitrate = (target × 8 × 0.98 − audioBits) / duration`, where 0.98 leaves room for the
-    container and `audioBits` is the audio's bitrate × duration (measured when copied, set when
-    encoded). Problem if the video bitrate comes out under 0.02 bits per pixel per frame at the
-    chosen size: "8 MB is too small for 4 minutes at 1080p. Try 480p or a larger size." The result
+    container and `audioBits` is the audio's bitrate × duration (measured when copied, 128 kbps
+    assumed when it can't be; set when encoded). The video is encoded at a constant bitrate, which
+    lands nearer the target than a variable one. A hint gives the video's bitrate ("About 679 kbps
+    for the video."), and another says when the file is already under the target. Problem if the
+    video bitrate comes out under 0.02 bits per pixel per frame at the chosen size and frame rate
+    (30 fps assumed when unknown): "12 MB is too small for 4 minutes at 1080p. Try 480p or a larger
+    size.", suggesting the largest smaller resolution that would work, or only a larger size when
+    none would. Durations under ten minutes keep their seconds ("1 minute 30 seconds"). The result
     is single pass, so it can miss; after the job, if the file is over the target by more than 5%,
-    the export says so in danger text.
+    the export says so in danger text ("6% over the 10 MB target.", rounded up).
 - **Resolution** (segmented): Original, 1080p, 720p, 480p. The number is the shorter side (so it
   works for portrait video), never scales up (options above the source are disabled), keeps the
   aspect ratio, rounds down to even numbers.
-- **Frame rate** (segmented): Original, 30, 24. Never raises it. Hidden behind "More options".
+- **Frame rate** (segmented): Original, 30, 24. Never raises it: a cap at or above the source's rate
+  is disabled. A source whose rate isn't known (variable) can be capped. Hidden behind "More
+  options".
 - **Codec** (segmented, under "More options"): H.264 (default; MP4), HEVC (MP4, `hvc1`), VP9
-  (WebM), AV1 (MP4). Each is enabled only if `canEncodeVideo` says yes at the chosen size; otherwise
-  disabled with "Not available in this browser". H.264's caption: "Plays everywhere."
-- **Audio** (segmented): "Keep" (default), "Smaller", "Remove". Keep copies the audio when the output
-  container holds its codec, otherwise encodes it at 128 kbps (AAC in MP4, Opus in WebM). Smaller
-  encodes at 96 kbps. The AAC add-on is registered if the browser can't encode AAC.
+  (WebM), AV1 (MP4). Each is enabled only if `canEncodeVideo` says yes at the chosen size (the
+  worker's `encodable` request, asked once per size; the 1080p answer stands in until it replies);
+  the disabled ones are named under the control: "Not available in this browser: HEVC, AV1." A
+  codec that becomes unavailable falls back to the first that is. Captions: H.264 "Plays
+  everywhere."; HEVC "Smaller files. Plays on most phones and Macs, but not in every browser."; VP9
+  "A WebM file. Plays in browsers, less widely elsewhere."; AV1 "The smallest files, and the slowest
+  to make. Plays on newer devices."
+- **Audio** (segmented, shown only when there is audio): "Keep" (default), "Smaller", "Remove". Every
+  audio track is kept. Keep copies them when the output container holds all their codecs, otherwise
+  encodes them at 128 kbps (AAC in MP4, Opus in WebM). Smaller encodes at 96 kbps. Encoding mixes
+  surround down to stereo. The AAC add-on is registered if the browser can't encode AAC. Audio that
+  must be encoded but can't be decoded (AC-3 into WebM, say), or a missing Opus encoder, is a
+  problem worded with the codec and container. Subtitles go along when the container holds them;
+  otherwise a hint says "Subtitles aren't carried over."
+- The settings carry over to the next file; the target size starts at half of each file. A
+  resolution or frame rate the next file can't take falls back to Original.
 - `hardwareAcceleration: 'no-preference'`. Badge: Re-encodes, with a caption saying what is copied.
 - Output name: `<stem> (compressed).<ext>`.
 - The export shows the size change. If the result is larger than the source, it says so plainly
-  ("4% larger than the original") and suggests a lower quality.
+  and suggests what to change ("4% larger than the original. Try a lower quality.", or "Try a
+  smaller target." after a target-size job).
 
 ### 6.7 Grab frame
 
@@ -323,6 +345,8 @@ Like Bytesize's: a promise-based client on the page, a dispatcher in the worker.
 ```ts
 type Request =
   | { type: 'probe'; id: number; file: File }
+  | { type: 'capabilities'; id: number }
+  | { type: 'encodable'; id: number; size: { width: number; height: number } } // video codecs at a size
   | { type: 'keyframe'; id: number; file: File; trackId: number; time: number }
   | { type: 'thumbnails'; id: number; file: File; times: number[]; height: number }
   | { type: 'run'; id: number; file: File; plan: Plan; target: TargetSpec }

@@ -1,5 +1,5 @@
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
-import { capabilities } from '@/media/encoders'
+import { capabilities, encodableAt } from '@/media/encoders'
 import { thumbnails } from '@/media/frames'
 import { keyframeAt, probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
@@ -17,6 +17,9 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         break
       case 'capabilities':
         post({ type: 'done', id: request.id, value: await capabilities() })
+        break
+      case 'encodable':
+        post({ type: 'done', id: request.id, value: await encodableAt(request.size) })
         break
       case 'keyframe':
         post({ type: 'done', id: request.id, value: await keyframeAt(request.file, request.trackId, request.time) })

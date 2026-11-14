@@ -2,7 +2,7 @@ import { AlertCircle, AudioLines, Check, Download, Film, X } from 'lucide-react'
 import type { Export } from '@/hooks/useJob'
 import { cn } from '@/lib/cn'
 import { formatSize } from '@/lib/info'
-import { sizeChange } from '@/lib/progress'
+import { sizeChange, sizeWarnings } from '@/lib/progress'
 import { Button } from './ui/Button'
 
 /** The results of this session's jobs, newest first, at the foot of the stage (DESIGN.md). */
@@ -23,6 +23,7 @@ function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) 
   const failed = item.error !== undefined
   const Icon = failed ? AlertCircle : item.kind === 'audio' ? AudioLines : Film
   const change = failed ? null : sizeChange(item.size, item.sourceSize)
+  const warnings = !failed && item.sizeCheck ? sizeWarnings(item.size, item.sourceSize, item.sizeCheck.target) : null
   return (
     <li
       className={cn(
@@ -44,6 +45,8 @@ function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) 
         ) : (
           <p className="text-xs text-ink-soft">{[formatSize(item.size), change].filter(Boolean).join(' · ')}</p>
         )}
+        {warnings?.overTarget && <p className="text-xs text-danger">{warnings.overTarget}</p>}
+        {warnings?.larger && <p className="text-xs text-ink">{warnings.larger}</p>}
       </div>
       {!failed &&
         (item.url ? (
