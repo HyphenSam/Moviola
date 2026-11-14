@@ -109,7 +109,7 @@ describe('Trim', () => {
     expect(outField()).toHaveValue('1:23.500')
   })
 
-  it('moves the range with the timeline’s handles, which only Trim shows', async () => {
+  it('moves the range with the timeline’s handles, which only the range tools show', async () => {
     const { user } = await openOnTrim()
     screen.getByRole('slider', { name: 'In point' }).focus()
     await user.keyboard('{Shift>}{ArrowRight}{/Shift}{ArrowRight}')

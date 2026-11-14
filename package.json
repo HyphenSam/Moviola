@@ -23,6 +23,7 @@
     "@mediabunny/flac-encoder": "1.65.2",
     "@mediabunny/mp3-encoder": "1.65.2",
     "clsx": "^2.1.1",
+    "gifenc": "1.0.3",
     "lucide-react": "^1.72.0",
     "mediabunny": "^1.65.2",
     "radix-ui": "^1.8.1",

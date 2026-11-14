@@ -17,7 +17,7 @@ Have ffmpeg on your PATH (phase 1 uses it to make test files).
 | 5 | Timeline and Trim | ☑ |
 | 6 | Change container, Remove audio | ☑ |
 | 7 | Compress | ☑ |
-| 8 | Grab frame, Make GIF | ☐ |
+| 8 | Grab frame, Make GIF | ☑ |
 | 9 | Polish, offline, accessibility, README | ☐ |
 
 ---

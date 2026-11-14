@@ -1,4 +1,4 @@
-import { AlertCircle, AudioLines, Check, Download, Film, X } from 'lucide-react'
+import { AlertCircle, AudioLines, Check, Download, Film, Image, X } from 'lucide-react'
 import type { Export } from '@/hooks/useJob'
 import { cn } from '@/lib/cn'
 import { formatSize } from '@/lib/info'
@@ -21,8 +21,10 @@ export function ExportsStrip({ exports, onRemove }: { exports: Export[]; onRemov
 
 function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) {
   const failed = item.error !== undefined
-  const Icon = failed ? AlertCircle : item.kind === 'audio' ? AudioLines : Film
-  const change = failed ? null : sizeChange(item.size, item.sourceSize)
+  const image = item.kind === 'frame' || item.kind === 'gif'
+  const Icon = failed ? AlertCircle : item.kind === 'audio' ? AudioLines : image ? Image : Film
+  // An image's size says nothing against the video's, so only audio and video show the change.
+  const change = failed || image ? null : sizeChange(item.size, item.sourceSize)
   const warnings = !failed && item.sizeCheck ? sizeWarnings(item.size, item.sourceSize, item.sizeCheck.target) : null
   return (
     <li

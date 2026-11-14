@@ -3,7 +3,7 @@
 import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
 import type { Capabilities } from './capabilities'
 import type { AudioTrack, MediaInfo, VideoTrack } from './info'
-import type { Plan } from './plan'
+import type { JobPlan } from './plan'
 import type { RunResult, Size, TargetSpec, WorkerCapabilities, WorkerClient } from './protocol'
 
 /** A browser that can encode everything and save to disk. Tests take away what they need missing. */
@@ -77,7 +77,7 @@ export const fakeAudioInfo = (over: Partial<MediaInfo> = {}) =>
 /** A job the fake client was asked to run; the test moves it along. */
 export type FakeJob = {
   file: File
-  plan: Plan
+  plan: JobPlan
   target: TargetSpec
   cancelled: boolean
   progress(fraction: number | null): void

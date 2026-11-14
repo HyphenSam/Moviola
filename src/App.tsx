@@ -7,6 +7,8 @@ import { CompressView } from './components/CompressView'
 import { ExportsStrip } from './components/ExportsStrip'
 import { ExtractAudioView } from './components/ExtractAudioView'
 import { FileCard } from './components/FileCard'
+import { GifView } from './components/GifView'
+import { GrabFrameView } from './components/GrabFrameView'
 import { JobAction } from './components/JobAction'
 import { Logo } from './components/Logo'
 import { MediaInfoView } from './components/MediaInfoView'
@@ -26,7 +28,7 @@ import { APP_NAME } from './lib/brand'
 import type { Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
-import type { Planned } from './lib/plan'
+import type { JobPlan, Planned } from './lib/plan'
 import {
   containerTracks,
   defaultContainer,
@@ -44,10 +46,12 @@ import {
   resolutionOptions,
 } from './lib/plans/compress'
 import { DEFAULT_EXTRACT_AUDIO, defaultAudioTrack, formatProblems, planExtractAudio } from './lib/plans/extract-audio'
+import { planGrabFrame, type FrameFormat } from './lib/plans/grab-frame'
+import { DEFAULT_GIF, gifRange, gifWidth, planGif, widthOptions } from './lib/plans/make-gif'
 import { planRemoveAudio } from './lib/plans/remove-audio'
 import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
 import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
-import { hasAudio, hasVideo, videoTrack } from './lib/info'
+import { hasAudio, hasVideo, videoTrack, type MediaInfo } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
@@ -56,6 +60,9 @@ import { CONTAINER_CODECS } from './media/formats'
 type PerFile = { sourceId: number; ids: number[] } | null
 const idsFor = (chosen: PerFile, sourceId: number | undefined) =>
   chosen && chosen.sourceId === sourceId ? chosen.ids : []
+
+/** A range tool's range before the user picks one: Make GIF's first five seconds, else the whole file. */
+const unpicked = (info: MediaInfo, tool: ToolId | null) => (tool === 'gif' ? gifRange(info) : wholeFile(info))
 
 /** The installed app's file handler hands files over here (manifest `file_handlers`). */
 type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(): Promise<File> }[] }) => void): void }
@@ -73,8 +80,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // So does Extract audio's track; its format and options carry over to the next file.
   const [track, setTrack] = useState<{ sourceId: number; id: number } | null>(null)
   const [audioSettings, setAudioSettings] = useState(DEFAULT_EXTRACT_AUDIO)
-  // The range belongs to one file and is shared by the tools that use one (Trim, later Make GIF); the
-  // whole file until the user picks one. Trim's mode carries over to the next file.
+  // The range belongs to one file and is shared by the tools that use one (Trim and Make GIF); until the
+  // user picks one, Trim's is the whole file and Make GIF's the first five seconds. Trim's mode carries
+  // over to the next file.
   const [ranged, setRanged] = useState<{ sourceId: number; range: TimeRange } | null>(null)
   const [trimMode, setTrimMode] = useState<TrimMode>('fast')
   // Change container's choice carries over to the next file; the tracks unticked there, and the audio
@@ -86,6 +94,16 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // of each file.
   const [compressSettings, setCompressSettings] = useState(DEFAULT_COMPRESS)
   const [target, setTarget] = useState<{ sourceId: number; mb: number } | null>(null)
+  // Grab frame's format and Make GIF's settings carry over to the next file.
+  const [frameFormat, setFrameFormat] = useState<FrameFormat>('png')
+  const [gifSettings, setGifSettings] = useState(DEFAULT_GIF)
+  const [copyNote, setCopyNote] = useState<string | null>(null)
+  // What came of a copy is news for a moment, not a state the frame stays in.
+  useEffect(() => {
+    if (!copyNote) return
+    const timer = setTimeout(() => setCopyNote(null), 4000)
+    return () => clearTimeout(timer)
+  }, [copyNote])
   // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
   const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {} })
   useEffect(() => {
@@ -99,24 +117,24 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const video = source && videoTrack(source.info)
   // The playhead, shared by the player, the timeline and the tools that set times from it.
   const player = usePlayer(source?.id ?? null, source?.info.duration ?? 0, video?.frameRate ?? null)
-  const range = source ? (ranged?.sourceId === source.id ? ranged.range : wholeFile(source.info)) : null
+  const tools = toolStates(source?.info ?? null)
+  const tool = source ? (choice?.sourceId === source.id ? choice.tool : defaultTool(source.info)) : null
+  const toolName = tools.find((t) => t.id === tool)?.label
+
+  const range = source ? (ranged?.sourceId === source.id ? ranged.range : unpicked(source.info, tool)) : null
   const updateRange = useCallback(
     (change: (range: TimeRange) => TimeRange) =>
       source &&
       setRanged((r) => ({
         sourceId: source.id,
-        range: change(r?.sourceId === source.id ? r.range : wholeFile(source.info)),
+        range: change(r?.sourceId === source.id ? r.range : unpicked(source.info, tool)),
       })),
-    [source],
+    [source, tool],
   )
   const onMark = useCallback(
     (end: 'in' | 'out', time: number) => updateRange((r) => ({ ...r, [end === 'in' ? 'start' : 'end']: time })),
     [updateRange],
   )
-
-  const tools = toolStates(source?.info ?? null)
-  const tool = source ? (choice?.sourceId === source.id ? choice.tool : defaultTool(source.info)) : null
-  const toolName = tools.find((t) => t.id === tool)?.label
 
   // Opening another file while a job runs would leave the job writing for a file that's gone.
   const { running, cancel } = job
@@ -169,7 +187,27 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const compressCaps: Capabilities = { ...capabilities, encodeVideo: encodableHere ?? capabilities.encodeVideo }
   const compressNow = source ? effectiveCompress(source.info, chosenCompress, compressCaps) : null
 
-  const planned: Planned | null = !source
+  const gif = source ? { ...gifSettings, width: gifWidth(source.info, gifSettings.width) } : null
+  // Copying needs images on the clipboard, which takes PNG only.
+  const canCopy = typeof window.ClipboardItem !== 'undefined' && !!navigator.clipboard?.write
+  const copyFrame = () => {
+    const frame = source && planGrabFrame(source.info, player.time, 'png').plan
+    if (!frame) return
+    // The item takes the image's promise, so the write starts inside the click while the worker draws it.
+    const png = client.run(source.file, frame, { type: 'memory' }).result.then(({ blob }) => blob!)
+    setCopyNote(null)
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(
+      () => setCopyNote('Copied the frame.'),
+      (error: unknown) =>
+        setCopyNote(
+          error instanceof DOMException && error.name === 'NotAllowedError'
+            ? 'The browser didn’t allow copying to the clipboard. Save the frame instead.'
+            : `The frame couldn’t be copied: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    )
+  }
+
+  const planned: Planned<JobPlan> | null = !source
     ? null
     : tool === 'extract-audio'
       ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, capabilities)
@@ -181,7 +219,11 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
             : tool === 'compress'
               ? planCompress(source.info, chosenCompress, CONTAINER_CODECS, compressCaps)
-              : null
+              : tool === 'frame'
+                ? planGrabFrame(source.info, player.time, frameFormat)
+                : tool === 'gif'
+                  ? planGif(source.info, range!, gif!)
+                  : null
   // An audio file is converted, not extracted from (SPEC.md section 6).
   const converting = !!source && !hasVideo(source.info)
   const [verb, doing] =
@@ -193,11 +235,15 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           ? ['Remove audio', 'Removing audio']
           : tool === 'compress'
             ? ['Compress', 'Compressing']
-            : converting
-              ? ['Convert', 'Converting']
-              : ['Extract', 'Extracting']
+            : tool === 'frame'
+              ? ['Save frame', 'Saving frame']
+              : tool === 'gif'
+                ? ['Make GIF', 'Making GIF']
+                : converting
+                  ? ['Convert', 'Converting']
+                  : ['Extract', 'Extracting']
   const memoryHint =
-    source && source.info.size > 2_000_000_000 && !canSaveToDisk()
+    source && tool !== 'frame' && tool !== 'gif' && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
       : null
 
@@ -339,9 +385,27 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                       setCompressSettings((s) => ({ ...s, ...change }))
                     }}
                   />
-                ) : (
-                  <p className="text-xs text-ink-soft">This tool arrives in a later version.</p>
-                )}
+                ) : tool === 'frame' ? (
+                  <GrabFrameView
+                    duration={source.info.duration}
+                    playhead={player.time}
+                    format={frameFormat}
+                    copyNote={copyNote}
+                    onStep={player.step}
+                    onFormat={setFrameFormat}
+                  />
+                ) : tool === 'gif' ? (
+                  <GifView
+                    duration={source.info.duration}
+                    range={range!}
+                    playhead={player.time}
+                    settings={gif!}
+                    widths={widthOptions(source.info)}
+                    onRange={(r) => updateRange(() => r)}
+                    onSeek={player.seek}
+                    onChange={(change) => setGifSettings((s) => ({ ...s, ...change }))}
+                  />
+                ) : null}
               </section>
             ) : (
               <section>
@@ -362,6 +426,15 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 verb={verb}
                 running={job.running}
                 hint={memoryHint}
+                secondary={
+                  tool === 'frame' &&
+                  canCopy &&
+                  planned?.plan && (
+                    <Button onClick={copyFrame} disabled={!!job.running}>
+                      Copy
+                    </Button>
+                  )
+                }
                 onStart={() => source && planned?.plan && void job.start(source.file, planned.plan, doing)}
                 onCancel={job.cancel}
               />
@@ -413,7 +486,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             frames={frames}
             player={player}
             thumbnails={client.thumbnails}
-            range={tool === 'trim' ? range : null}
+            range={tool === 'trim' || tool === 'gif' ? range : null}
             cut={note ? keyframe : null}
             onRange={(r) => updateRange(() => r)}
             onMark={onMark}

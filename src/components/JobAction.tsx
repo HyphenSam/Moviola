@@ -1,5 +1,6 @@
 import type { Running } from '@/hooks/useJob'
-import type { Planned } from '@/lib/plan'
+import type { ReactNode } from 'react'
+import type { JobPlan, Planned } from '@/lib/plan'
 import { JobProgress } from './JobProgress'
 import { LosslessBadge } from './LosslessBadge'
 import { Button } from './ui/Button'
@@ -11,14 +12,17 @@ export function JobAction({
   verb,
   running,
   hint,
+  secondary,
   onStart,
   onCancel,
 }: {
   /** Null for a tool with no action, which still shows a running job's progress. */
-  planned: Planned | null
+  planned: Planned<JobPlan> | null
   verb: string
   running: Running | null
   hint?: string | null
+  /** A second action beside the primary one (Grab frame's Copy). */
+  secondary?: ReactNode
   onStart: () => void
   onCancel: () => void
 }) {
@@ -37,7 +41,11 @@ export function JobAction({
         <Button variant="primary" disabled={!planned.plan} onClick={onStart}>
           {verb}
         </Button>
-        {planned.plan && <LosslessBadge lossless={planned.plan.lossless} label={planned.badge} />}
+        {secondary}
+        {/* A frame isn't a copy of the stream, nor re-encoded as one: it has no badge (SPEC.md 6.7). */}
+        {planned.plan && planned.plan.kind !== 'frame' && (
+          <LosslessBadge lossless={planned.plan.lossless} label={planned.badge} />
+        )}
       </div>
       {planned.caption && <p className="text-xs text-ink-soft">{planned.caption}</p>}
       {planned.hints?.map((h) => (

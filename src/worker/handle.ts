@@ -1,6 +1,8 @@
+import { isImagePlan, type FramePlan, type GifPlan, type Plan } from '@/lib/plan'
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { capabilities, encodableAt } from '@/media/encoders'
 import { thumbnails } from '@/media/frames'
+import { grabFrame, makeGif } from '@/media/images'
 import { keyframeAt, probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
@@ -41,9 +43,11 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
         running.set(request.id, controller)
         try {
           post({ type: 'progress', id: request.id, fraction: null })
-          const result = await runTo(request.target, request, controller.signal, (fraction) =>
-            post({ type: 'progress', id: request.id, fraction }),
-          )
+          const onProgress = (fraction: number) => post({ type: 'progress', id: request.id, fraction })
+          const { file, plan } = request
+          const result = isImagePlan(plan)
+            ? await runImage(file, plan, controller.signal, onProgress)
+            : await runTo(request.target, { file, plan }, controller.signal, onProgress)
           post({ type: 'done', id: request.id, value: result })
         } finally {
           running.delete(request.id)
@@ -60,7 +64,7 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
 
 async function runTo(
   target: TargetSpec,
-  { file, plan }: Extract<Request, { type: 'run' }>,
+  { file, plan }: { file: File; plan: Plan },
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
 ) {
@@ -86,6 +90,17 @@ async function runTo(
     await discard(target.handle)
     throw error
   }
+}
+
+/** Images are small, so they're always built in memory (SPEC.md section 7). */
+async function runImage(
+  file: File,
+  plan: FramePlan | GifPlan,
+  signal: AbortSignal,
+  onProgress: (fraction: number) => void,
+) {
+  const blob = plan.kind === 'frame' ? await grabFrame(file, plan) : await makeGif(file, plan, { signal, onProgress })
+  return { size: blob.size, blob }
 }
 
 /** The save dialog makes an empty file at once. If the job never wrote it, remove it, so a cancelled

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { uniqueName } from '@/lib/names'
-import type { Plan } from '@/lib/plan'
+import { isImagePlan, type JobPlan, type Plan } from '@/lib/plan'
 import type { TargetSpec, WorkerClient } from '@/lib/protocol'
 
 /** A result in the exports strip: downloadable (`url`), saved to disk, or failed (`error`). */
 export type Export = {
   id: number
   name: string
-  kind: Plan['kind']
+  kind: JobPlan['kind']
   sourceSize: number
   /** Compress's results are checked against the source and the target (Plan `sizeCheck`). */
   sizeCheck?: Plan['sizeCheck']
@@ -40,7 +40,7 @@ export function useJob(client: WorkerClient) {
 
   /** Starts a job. Call it straight from the click: the save dialog must open inside it. */
   const start = useCallback(
-    async (file: File, plan: Plan, doing: string) => {
+    async (file: File, plan: JobPlan, doing: string) => {
       if (current.current) return
       const ticket = ++tickets.current
       // Hold the slot while the dialog is open, so a second click can't start another job.
@@ -51,7 +51,8 @@ export function useJob(client: WorkerClient) {
         plan.name,
         latest.current.map((e) => e.name),
       )
-      const picker = savePicker()
+      // Images are small, so they're built in memory and downloaded (SPEC.md section 7).
+      const picker = isImagePlan(plan) ? undefined : savePicker()
       if (picker) {
         try {
           const handle = await picker({
@@ -86,7 +87,7 @@ export function useJob(client: WorkerClient) {
         current.current = null
         setRunning(null)
         const id = nextExport.current++
-        const check = plan.sizeCheck && { sizeCheck: plan.sizeCheck }
+        const check = 'sizeCheck' in plan && plan.sizeCheck && { sizeCheck: plan.sizeCheck }
         setExports((list) => [
           { id, name, kind: plan.kind, sourceSize: file.size, ...check, ...result } as Export,
           ...list,

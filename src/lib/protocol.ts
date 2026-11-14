@@ -1,6 +1,6 @@
 import type { Capabilities } from './capabilities'
 import type { MediaInfo } from './info'
-import type { Plan } from './plan'
+import type { JobPlan } from './plan'
 
 /** Where a job's output goes: a file the user chose in the save dialog, streamed to disk, or memory,
  * returned as a Blob to download (SPEC.md section 7). */
@@ -17,7 +17,7 @@ export type Request =
   | { type: 'encodable'; id: number; size: Size }
   | { type: 'keyframe'; id: number; file: File; trackId: number; time: number }
   | { type: 'thumbnails'; id: number; file: File; times: number[]; height: number }
-  | { type: 'run'; id: number; file: File; plan: Plan; target: TargetSpec }
+  | { type: 'run'; id: number; file: File; plan: JobPlan; target: TargetSpec }
   | { type: 'cancel'; id: number }
 
 export type Reply =
@@ -45,7 +45,7 @@ export type WorkerClient = {
   /** Frames of the primary video track at `times`, `height` pixels high, rotation applied; null for
    * a frame that couldn't be decoded, and none at all when the video can't be. */
   thumbnails(file: File, times: number[], height: number): Promise<(ImageBitmap | null)[]>
-  run(file: File, plan: Plan, target: TargetSpec, onProgress?: (fraction: number | null) => void): Job
+  run(file: File, plan: JobPlan, target: TargetSpec, onProgress?: (fraction: number | null) => void): Job
 }
 
 /** The parts of a Worker the client uses. */

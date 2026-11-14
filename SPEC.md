@@ -318,7 +318,12 @@ Saves the frame at the playhead as an image.
 - **Size**: the video's full display size, rotation applied (`CanvasSink` with the track's rotation).
 - The frame is the one shown at the playhead. The settings view shows the playhead's timecode and
   "Set to playhead" is implied; frame-step buttons sit beside it for convenience.
-- Copies to the clipboard as well, with a secondary "Copy" button (PNG only; `ClipboardItem`).
+- A secondary "Copy" button puts the frame on the clipboard as a PNG whichever format is chosen
+  (clipboards take images as PNG only; `ClipboardItem`, shown only where the browser has it). It says
+  "Copied the frame." for a moment; a browser that refuses gets "The browser didn’t allow copying to the
+  clipboard. Save the frame instead."
+- The caption gives the size: "The full 1920 × 1080 frame."
+- Problem: the video can't be decoded ("This browser can’t decode HEVC, so it can’t show a frame.").
 - HDR video is tone-mapped by the browser's decoder; say "HDR frames are converted to SDR" in a
   caption when the track is HDR.
 - Badge: none for images (it isn't a copy of the stream); the action is "Save frame".
@@ -331,11 +336,16 @@ Turns a short range into an animated GIF.
 - **Range**: as Trim (shared range), default the first 5 seconds, or the trim range if set. A hint
   appears past 15 seconds ("Long GIFs get large; consider a video instead."); past 60 seconds the
   action is disabled.
-- **Width** (segmented): 320, 480 (default), 640 px, never above the source; height follows.
+- **Width** (segmented): 320, 480 (default), 640 px, never above the source (a width above it falls
+  back to the widest that fits, or to the source's own width when it's narrower than 320); height
+  follows. The past-a-minute problem: "A GIF can be at most a minute long, and this range is 1:10.000.
+  Shorten it."
 - **Frame rate** (segmented): 10, 15 (default), 20 fps.
 - **Loop** switch, on by default.
 - Frames come from `CanvasSink` at the chosen size and rate; encoding uses gifenc (`quantize` per
-  frame to 256 colours, `applyPalette`, `writeFrame`) in the worker. Progress counts frames.
+  frame to 256 colours, `applyPalette`, `writeFrame`) in the worker. Progress counts frames. GIF delays
+  are hundredths of a second, so at 15 fps they alternate (7, 7, 6) and the GIF runs at true speed. With
+  Loop off the loop extension is left out, so the GIF plays once.
 - Badge: Re-encodes. Caption: "GIFs are limited to 256 colours."
 - Output name: `<stem>.gif`.
 

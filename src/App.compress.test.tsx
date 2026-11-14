@@ -59,7 +59,7 @@ describe('Compress', () => {
     expect(field).toHaveValue(10)
     expect(screen.getByText(/^About [0-9.]+ [kM]bps for the video\.$/)).toBeInTheDocument()
     await user.click(compress())
-    expect(client.jobs[0].plan.sizeCheck).toEqual({ target: 10_000_000 })
+    expect(client.jobs[0].plan).toMatchObject({ sizeCheck: { target: 10_000_000 } })
   })
 
   it('refuses a target too small for the length and size, and says what to try', async () => {
@@ -103,7 +103,7 @@ describe('Compress', () => {
     expect(screen.getByText('Not available in this browser: H.264.')).toBeInTheDocument()
     expect(option('Codec', 'HEVC')).toBeChecked()
     await user.click(compress())
-    expect(client.jobs[0].plan.video).toMatchObject({ codec: 'hevc', width: 1280, height: 720 })
+    expect(client.jobs[0].plan).toMatchObject({ video: { codec: 'hevc', width: 1280, height: 720 } })
   })
 
   it('makes audio smaller or removes it', async () => {
@@ -112,7 +112,7 @@ describe('Compress', () => {
     expect(screen.getByText('Video re-encoded to H.264, audio to AAC at 96 kbps.')).toBeInTheDocument()
     await user.click(option('Audio', 'Remove'))
     await user.click(compress())
-    expect(client.jobs[0].plan.keep).toEqual([1])
+    expect(client.jobs[0].plan).toMatchObject({ keep: [1] })
   })
 
   it('has no audio choice for a silent video', async () => {
