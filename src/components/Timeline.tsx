@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { TimeRange } from '@/lib/plans/trim'
 import type { WorkerClient } from '@/lib/protocol'
 import { formatTimecode, stepFrames } from '@/lib/timecode'
-import { moveEnd, thumbnailCount, thumbnailTimes, timeAt } from '@/lib/timeline'
+import { gripLefts, moveEnd, thumbnailCount, thumbnailTimes, timeAt } from '@/lib/timeline'
 
 const HEIGHT = 48
+/** The range grips' width: w-3. */
+const GRIP = 12
 
 type Dragging = 'playhead' | 'start' | 'end'
 
@@ -37,12 +39,23 @@ export function Timeline({
 }) {
   const strip = useRef<HTMLDivElement>(null)
   const dragging = useRef<Dragging | null>(null)
+  const [width, setWidth] = useState(0)
   const hours = duration >= 3600
   const at = (clientX: number) => {
     const box = strip.current!.getBoundingClientRect()
     return timeAt(clientX - box.left, box.width, duration)
   }
   const percent = (t: number) => `${duration > 0 ? (Math.min(Math.max(t, 0), duration) / duration) * 100 : 0}%`
+
+  // Measured before paint, so the grips never show at a width of 0.
+  useLayoutEffect(() => {
+    const el = strip.current!
+    setWidth(el.clientWidth)
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  const grips = range && gripLefts(range, duration, width, GRIP)
 
   function move(what: Dragging, t: number) {
     if (what === 'playhead' || !range) return onSeek(t)
@@ -101,7 +114,7 @@ export function Timeline({
         onPointerUp={() => (dragging.current = null)}
         onPointerCancel={() => (dragging.current = null)}
       >
-        <Thumbnails file={file} duration={duration} aspect={aspect} thumbnails={thumbnails} strip={strip} />
+        <Thumbnails file={file} duration={duration} aspect={aspect} thumbnails={thumbnails} width={width} />
         {range && (
           <>
             <div className="absolute inset-y-0 left-0 bg-black/65" style={{ width: percent(range.start) }} />
@@ -130,18 +143,18 @@ export function Timeline({
             className="absolute -top-0.5 left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-stage-ink"
           />
         </div>
-        {range && (
+        {range && grips && (
           <>
             <Handle
               {...slider('start', 'In point', range.start)}
               side="start"
-              left={percent(range.start)}
+              left={grips.start}
               onPointerDown={(e) => grab('start', e)}
             />
             <Handle
               {...slider('end', 'Out point', range.end)}
               side="end"
-              left={percent(range.end)}
+              left={grips.end}
               onPointerDown={(e) => grab('end', e)}
             />
           </>
@@ -151,16 +164,17 @@ export function Timeline({
   )
 }
 
-/** An amber grip at one end of the range, its flat side facing in. Wide enough to grab with a finger. */
+/** An amber grip at one end of the range, its flat side facing in, `left` pixels along the strip. Wide
+ * enough to grab with a finger. */
 function Handle({
   side,
   left,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & { side: 'start' | 'end'; left: string }) {
+}: React.HTMLAttributes<HTMLDivElement> & { side: 'start' | 'end'; left: number }) {
   return (
     <div
       {...props}
-      className={`absolute inset-y-0 flex w-3 cursor-ew-resize items-center justify-center bg-accent focus-visible:outline-offset-1 ${side === 'start' ? 'rounded-l-[4px]' : '-ml-3 rounded-r-[4px]'}`}
+      className={`absolute inset-y-0 flex w-3 cursor-ew-resize items-center justify-center bg-accent focus-visible:outline-offset-1 ${side === 'start' ? 'rounded-l-[4px]' : 'rounded-r-[4px]'}`}
       style={{ left }}
     >
       <span aria-hidden="true" className="h-4 w-0.5 rounded-full bg-accent-ink/60" />
@@ -175,27 +189,19 @@ function Thumbnails({
   duration,
   aspect,
   thumbnails,
-  strip,
+  width,
 }: {
   file: File
   duration: number
   aspect: number | null
   thumbnails: WorkerClient['thumbnails']
-  strip: React.RefObject<HTMLDivElement | null>
+  /** The strip's width in CSS pixels. */
+  width: number
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const [width, setWidth] = useState(0)
   const [images, setImages] = useState<(ImageBitmap | null)[]>([])
   const cache = useRef(new Map<number, (ImageBitmap | null)[]>())
   const count = aspect ? thumbnailCount(width, aspect, HEIGHT) : 0
-
-  useEffect(() => {
-    const el = strip.current!
-    setWidth(el.clientWidth)
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth))
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [strip])
 
   useEffect(() => {
     if (!count) return

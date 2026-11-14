@@ -110,6 +110,18 @@ describe('Timeline', () => {
     expect(seeks).toEqual([30])
   })
 
+  it('still drags the in point when the range is too short for both grips side by side', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400)
+    // Half a second of 80 s is 2.5 px: the grips sit outside their ends instead of over each other.
+    const { ranges, strip } = setup({ range: { start: 10, end: 10.5 } })
+    expect(inPoint().style.left).toBe('38px')
+    expect(outPoint().style.left).toBe('52.5px')
+    fireEvent.pointerDown(inPoint(), { clientX: 45, pointerId: 1 })
+    fireEvent.pointerMove(strip, { clientX: 40, pointerId: 1 })
+    fireEvent.pointerUp(strip, { pointerId: 1 })
+    expect(ranges.at(-1)).toEqual({ start: 8, end: 10.5 })
+  })
+
   it('marks where a fast trim really starts', () => {
     setup({ range: { start: 12.48, end: 20 }, cut: 12 })
     expect(screen.getByRole('img', { name: 'Fast trim starts at 0:12.000' })).toBeInTheDocument()

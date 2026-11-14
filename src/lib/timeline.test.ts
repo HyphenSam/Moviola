@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { moveEnd, thumbnailCount, thumbnailTimes, timeAt } from './timeline'
+import { gripLefts, moveEnd, thumbnailCount, thumbnailTimes, timeAt } from './timeline'
 
 describe('timeAt', () => {
   it('turns a position along the strip into a time', () => {
@@ -55,5 +55,22 @@ describe('moveEnd', () => {
 
   it('lets the out point reach the very end even off the frame grid', () => {
     expect(moveEnd(range, 'end', 83.5, 30, 83.5)).toEqual({ start: 10, end: 83.5 })
+  })
+})
+
+describe('gripLefts', () => {
+  // An 80 s file on a 400 px strip, 12 px grips: 5 px a second.
+  it('puts each grip just inside its end when the range is wide enough for both', () => {
+    expect(gripLefts({ start: 10, end: 20 }, 80, 400, 12)).toEqual({ start: 50, end: 88 })
+    expect(gripLefts({ start: 10, end: 14.8 }, 80, 400, 12)).toEqual({ start: 50, end: 62 })
+  })
+
+  it('puts each grip outside its end when they would overlap inside', () => {
+    expect(gripLefts({ start: 10, end: 10.5 }, 80, 400, 12)).toEqual({ start: 38, end: 52.5 })
+  })
+
+  it('keeps both grips on the strip, side by side, at either end of the file', () => {
+    expect(gripLefts({ start: 0, end: 0.1 }, 80, 400, 12)).toEqual({ start: 0, end: 12 })
+    expect(gripLefts({ start: 79.9, end: 80 }, 80, 400, 12)).toEqual({ start: 376, end: 388 })
   })
 })

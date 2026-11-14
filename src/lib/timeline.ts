@@ -32,3 +32,15 @@ export function moveEnd(
     ? { ...range, start: Math.max(0, Math.min(t, range.end - frame)) }
     : { ...range, end: Math.min(duration, Math.max(t, range.start + frame)) }
 }
+
+/** Where the range's grips (`grip` pixels wide) go along a strip `width` wide, as each one's left edge.
+ * Each sits just inside its end, flat side facing in; when the range is too short for both, each sits
+ * outside its end instead, so neither covers the other. Both stay on the strip, side by side at worst. */
+export function gripLefts(range: TimeRange, duration: number, width: number, grip: number) {
+  const x = (t: number) => (duration > 0 ? (Math.min(Math.max(t, 0), duration) / duration) * width : 0)
+  const [a, b] = [x(range.start), x(range.end)]
+  const inside = b - a >= 2 * grip
+  const start = Math.min(inside ? a : Math.max(0, a - grip), width - 2 * grip)
+  const end = Math.max(Math.min(inside ? b - grip : b, width - grip), start + grip)
+  return { start, end }
+}
