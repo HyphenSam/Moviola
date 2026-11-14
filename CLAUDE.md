@@ -139,8 +139,16 @@ discarded.
   Compress passes the level's bitrate (`presetBitrate`) instead, and a constant bitrate for a target size.
 - An MP4 streamed to disk (`fastStart: 'reserve'`) carries a few hundred kB of reserved index space that
   one built in memory doesn't (about 0.4 MB on 90 s of 30 fps video with audio).
-- Firefox's VP9 and AV1 encoders are slow (2–3× real time at 720p) and overshoot the bitrate they're
-  given (about 1.6× and 2.2× on noisy video); Chrome's land on it. Firefox has no HEVC encoder.
+- Firefox's VP9 and AV1 encoders are slow (5–6 fps at 720p in release Firefox 159, against Chrome's
+  200+) and overshoot the bitrate they're given (VP9 about 1.55×, AV1 1.65× on noisy video; a constant
+  bitrate brings that to 1.2× and 1.5× at the same speed). Chrome's land on it. `latencyMode: 'realtime'`
+  is faster (VP9 6×, AV1 1.4×) but overshoots 2.2–2.7×, and a Conversion can't set it anyway.
+- Firefox on Windows has no HEVC in WebCodecs, encoding or decoding, even with `media.hevc.enabled`
+  and `dom.media.webcodecs.h265.enabled` set and Microsoft's HEVC extension installed; `<video>` plays it.
+- Headed Firefox decodes on the GPU, and Mediabunny resizes each frame through a 2D canvas (twice past a
+  2× downscale, for mipmapping): about 22 ms a frame at 720p and 40 ms at 480p, so a downscaled Compress
+  is slower than Original there (76 s and 111 s against 42 s on 90 s of 1080p). A WebGL scaler (one
+  textured draw) takes about 5 ms. Headless Firefox decodes in software, which hides most of this.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
 
