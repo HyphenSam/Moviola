@@ -1,8 +1,8 @@
-import { isImagePlan, type FramePlan, type GifPlan, type Plan } from '@/lib/plan'
+import { isImagePlan, type AnimationPlan, type FramePlan, type Plan } from '@/lib/plan'
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { capabilities, encodableAt } from '@/media/encoders'
 import { thumbnails } from '@/media/frames'
-import { grabFrame, makeGif } from '@/media/images'
+import { grabFrame, makeAnimation } from '@/media/images'
 import { keyframeAt, probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
@@ -95,11 +95,12 @@ async function runTo(
 /** Images are small, so they're always built in memory (SPEC.md section 7). */
 async function runImage(
   file: File,
-  plan: FramePlan | GifPlan,
+  plan: FramePlan | AnimationPlan,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
 ) {
-  const blob = plan.kind === 'frame' ? await grabFrame(file, plan) : await makeGif(file, plan, { signal, onProgress })
+  const blob =
+    plan.kind === 'frame' ? await grabFrame(file, plan) : await makeAnimation(file, plan, { signal, onProgress })
   return { size: blob.size, blob }
 }
 

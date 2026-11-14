@@ -11,7 +11,7 @@ const ICONS: Record<ToolId, LucideIcon> = {
   'remove-audio': VolumeX,
   compress: Shrink,
   frame: Camera,
-  gif: Film,
+  animation: Film,
 }
 
 /** One button per tool: a column on desktop, a scrolling row of chips on narrow screens. Arrow keys

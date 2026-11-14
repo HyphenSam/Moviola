@@ -9,7 +9,7 @@ export const TOOLS = [
   { id: 'remove-audio', label: 'Remove audio' },
   { id: 'compress', label: 'Compress' },
   { id: 'frame', label: 'Grab frame' },
-  { id: 'gif', label: 'Make GIF' },
+  { id: 'animation', label: 'Make animation' },
 ] as const
 
 export type ToolId = (typeof TOOLS)[number]['id']
@@ -17,7 +17,7 @@ export type ToolId = (typeof TOOLS)[number]['id']
 /** A tool as the rail shows it for the open file; `reason` says why it's dimmed. */
 export type ToolState = { id: ToolId; label: string; reason: string | null }
 
-const VIDEO_ONLY: ToolId[] = ['container', 'remove-audio', 'compress', 'frame', 'gif']
+const VIDEO_ONLY: ToolId[] = ['container', 'remove-audio', 'compress', 'frame', 'animation']
 const NEEDS_AUDIO: ToolId[] = ['extract-audio', 'remove-audio']
 
 export function toolStates(info: MediaInfo | null): ToolState[] {

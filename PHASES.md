@@ -234,6 +234,9 @@ GIFs at each width and rate play and loop in the browser. Report what you checke
 commit.
 ```
 
+**Added after phase 8:** WebP (lossy, or lossless with a switch) in Grab frame, and Make GIF became
+Make animation, writing a GIF or an animated WebP (SPEC.md 6.7 and 6.8).
+
 ---
 
 ## Phase 9: Polish, offline, accessibility, README

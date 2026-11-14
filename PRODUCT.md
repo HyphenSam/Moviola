@@ -38,7 +38,7 @@ which it did. Free and open source (MIT OR Apache-2.0).
 
 - One video open at a time, added by drag and drop, file picker, or opening it with the installed app.
 - Eight tools: extract audio, media info, trim, change container, remove audio, compress, grab a
-  frame, make a GIF.
+  frame, make an animation (GIF or WebP).
 - Copying jobs (most of them) run at disk speed. Re-encoding runs at whatever speed the browser's
   encoder manages, often hardware-accelerated, still minutes for a long video.
 - Large files are normal (gigabytes). In Chromium browsers results stream straight to a file the user
@@ -51,7 +51,7 @@ which it did. Free and open source (MIT OR Apache-2.0).
 - Copies any codec Mediabunny can read, AC-3, DTS and TrueHD included. Decoding and encoding
   depend on the browser: AC-3, DTS and TrueHD can't be decoded anywhere, HEVC only on some
   machines.
-- Writes MP4, MOV, MKV, WebM, M4A, MP3, WAV, FLAC, Ogg/Opus, PNG and GIF.
+- Writes MP4, MOV, MKV, WebM, M4A, MP3, WAV, FLAC, Ogg/Opus, PNG, JPEG, WebP and GIF.
 
 ## Brand Commitments
 

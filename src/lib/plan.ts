@@ -50,21 +50,24 @@ export type Plan = {
 }
 
 /** Grab frame's job (SPEC.md 6.7): the frame showing at `time` (the source's own timestamp), at the
- * video's full display size with rotation applied, as a PNG or a JPEG. */
+ * video's full display size with rotation applied, as a PNG, a JPEG or a WebP. */
 export type FramePlan = {
   kind: 'frame'
   name: string
-  mimeType: 'image/png' | 'image/jpeg'
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp'
+  /** The canvas encoder's quality, 0 to 1; 1 makes a lossless WebP. */
+  quality: number
   lossless: false
   time: number
 }
 
-/** Make GIF's job (SPEC.md 6.8): frames from `start` to `end` (the source's own timestamps) at
- * `frameRate`, `width` × `height`, quantised to 256 colours a frame; `loop` repeats it forever. */
-export type GifPlan = {
-  kind: 'gif'
+/** Make animation's job (SPEC.md 6.8): frames from `start` to `end` (the source's own timestamps) at
+ * `frameRate`, `width` × `height`, as a GIF (quantised to 256 colours a frame) or an animated WebP;
+ * `loop` repeats it forever. */
+export type AnimationPlan = {
+  kind: 'animation'
   name: string
-  mimeType: 'image/gif'
+  mimeType: 'image/gif' | 'image/webp'
   lossless: false
   start: number
   end: number
@@ -76,9 +79,10 @@ export type GifPlan = {
 
 /** Anything the worker can run: a Mediabunny conversion, or an image made from decoded frames. Images
  * are small and always built in memory (SPEC.md section 7). */
-export type JobPlan = Plan | FramePlan | GifPlan
+export type JobPlan = Plan | FramePlan | AnimationPlan
 
-export const isImagePlan = (plan: JobPlan): plan is FramePlan | GifPlan => plan.kind === 'frame' || plan.kind === 'gif'
+export const isImagePlan = (plan: JobPlan): plan is FramePlan | AnimationPlan =>
+  plan.kind === 'frame' || plan.kind === 'animation'
 
 /** A planner's answer: a plan, the caption under the badge, the badge's own words when Lossless or
  * Re-encodes would mislead, and hints worth knowing; or the reasons the job can't run, each a

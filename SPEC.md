@@ -105,7 +105,7 @@ storage is blocked they just start at their defaults).
 ### Timeline
 - A strip of thumbnails generated with `CanvasSink` (`frames.ts`) at evenly spaced timestamps, as
   many as fit the strip's width, made lazily after the file opens. Cache them per file.
-- Click or drag to seek. Range tools (Trim, Make GIF) add in and out handles; the range is shared
+- Click or drag to seek. Range tools (Trim, Make animation) add in and out handles; the range is shared
   between those two tools so switching between them keeps it.
 - Keyboard (when focus isn't in a text field): Space play/pause; ← → one second; Shift+← → five
   seconds; `,` `.` one frame; Home End start and end; `I` and `O` set in and out at the playhead.
@@ -117,7 +117,7 @@ action with a verb ("Extract", "Trim", …) and a Lossless or Re-encodes badge, 
 (section 8). Planners return problems instead of a plan when the job can't run; problems are
 shown above the action, which is disabled.
 
-Video-only tools (Remove audio, Compress, Grab frame, Make GIF, Change container) are dimmed for
+Video-only tools (Remove audio, Compress, Grab frame, Make animation, Change container) are dimmed for
 audio-only files; Extract audio is dimmed for files with no audio track. The rail tooltip says why.
 
 The default tool on opening a video is **Media info**; on opening an audio-only file, **Extract
@@ -314,7 +314,14 @@ Re-encodes to make the file smaller, optionally resized.
 
 Saves the frame at the playhead as an image.
 
-- **Format** (segmented): PNG (default) or JPEG (quality 90).
+- **Format** (segmented): PNG (default), JPEG (quality 90) or WebP (quality 90). With WebP a
+  **Lossless** switch (off by default) writes lossless WebP instead: canvases do that at quality 1, in
+  Chrome and Firefox alike. Captions: PNG "Every pixel as decoded.", JPEG and WebP "A smaller file, at
+  quality 90.", lossless WebP "Every pixel as decoded, in a smaller file than PNG." (about half the
+  size on a real 480p frame).
+- WebP is offered only where the browser's canvas can write it (`encodeWebp`, section 9; a canvas
+  that can't writes a PNG instead, so the probe checks the type that comes back). Problem otherwise:
+  "This browser can’t make WebP images. Choose PNG or JPEG."
 - **Size**: the video's full display size, rotation applied (`CanvasSink` with the track's rotation).
 - The frame is the one shown at the playhead. The settings view shows the playhead's timecode and
   "Set to playhead" is implied; frame-step buttons sit beside it for convenience.
@@ -327,27 +334,38 @@ Saves the frame at the playhead as an image.
 - HDR video is tone-mapped by the browser's decoder; say "HDR frames are converted to SDR" in a
   caption when the track is HDR.
 - Badge: none for images (it isn't a copy of the stream); the action is "Save frame".
-- Output name: `<stem> frame 0-01-23.456.png` (colons aren't allowed in Windows file names).
+- Output name: `<stem> frame 0-01-23.456.png` (colons aren't allowed in Windows file names), `.jpg`
+  for JPEG, `.webp` for WebP.
 
-### 6.8 Make GIF
+### 6.8 Make animation
 
-Turns a short range into an animated GIF.
+Turns a short range into an animated GIF or animated WebP.
 
+- **Format** (segmented): GIF (default) or WebP. WebP is offered only where the browser's canvas
+  can write it, as in Grab frame; problem otherwise: "This browser can’t make WebP images. Choose
+  GIF."
 - **Range**: as Trim (shared range), default the first 5 seconds, or the trim range if set. A hint
-  appears past 15 seconds ("Long GIFs get large; consider a video instead."); past 60 seconds the
-  action is disabled.
+  appears past 15 seconds ("Long animations get large; consider a video instead."); past 60 seconds
+  the action is disabled.
 - **Width** (segmented): 320, 480 (default), 640 px, never above the source (a width above it falls
   back to the widest that fits, or to the source's own width when it's narrower than 320); height
-  follows. The past-a-minute problem: "A GIF can be at most a minute long, and this range is 1:10.000.
-  Shorten it."
+  follows. The past-a-minute problem: "An animation can be at most a minute long, and this range is
+  1:10.000. Shorten it."
 - **Frame rate** (segmented): 10, 15 (default), 20 fps.
 - **Loop** switch, on by default.
-- Frames come from `CanvasSink` at the chosen size and rate; encoding uses gifenc (`quantize` per
-  frame to 256 colours, `applyPalette`, `writeFrame`) in the worker. Progress counts frames. GIF delays
-  are hundredths of a second, so at 15 fps they alternate (7, 7, 6) and the GIF runs at true speed. With
-  Loop off the loop extension is left out, so the GIF plays once.
-- Badge: Re-encodes. Caption: "GIFs are limited to 256 colours."
-- Output name: `<stem>.gif`.
+- Frames come from `CanvasSink` at the chosen size and rate, in the worker. Progress counts frames.
+- GIF: gifenc (`quantize` per frame to 256 colours, `applyPalette`, `writeFrame`). Delays are
+  hundredths of a second, so at 15 fps they go 7, 6, 7 and the GIF runs at true speed. With Loop off
+  the loop extension is left out, so the GIF plays once.
+- WebP: the canvas encodes each frame as a lossy WebP at quality 0.8, and `webp.ts` puts their
+  bitstreams into ANMF chunks as they are (each frame whole, no blending; a still's ICC profile and
+  metadata are left out). Durations are milliseconds (67, 66, 67 at 15 fps). The ANIM loop count is 0
+  (forever), or 1 with Loop off. On a real 480p video, 5 s at 480 px came to 1.4 MB against the GIF's
+  4.5 MB, and took a fifth of the time to make.
+- Badge: Re-encodes. Caption: GIF "GIFs are limited to 256 colours.", WebP "Full colour and smaller
+  than a GIF, but some sites and apps take only GIFs."
+- The action is "Make GIF" or "Make WebP".
+- Output name: `<stem>.gif` or `<stem>.webp`.
 
 ## 7. Running a job
 
@@ -384,7 +402,7 @@ cheap) but never block the UI.
   export has a Download button (an object URL, revoked when the export is removed). When the source
   is over 2 GB in this mode, a hint under the action warns that the result is held in memory until
   downloaded.
-- Images (frame, GIF) always go through memory; they're small.
+- Images (frame, animation) always go through memory; they're small.
 
 ### Progress and cancel
 - Mediabunny's `onProgress` gives the fraction. Time remaining is estimated from elapsed time and
@@ -412,6 +430,7 @@ type Capabilities = {
   saveToDisk: boolean // showSaveFilePicker (checked on the page)
   encodeVideo: Partial<Record<'avc' | 'hevc' | 'vp9' | 'av1', boolean>> // at 1080p; re-checked at the chosen size before running
   encodeAudio: Partial<Record<'aac' | 'opus' | 'mp3' | 'flac', boolean>> // after add-ons, all true where wasm runs
+  encodeWebp: boolean // a canvas writes WebP (Grab frame, Make animation)
 }
 ```
 

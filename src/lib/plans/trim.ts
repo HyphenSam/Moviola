@@ -5,7 +5,7 @@ import { extensionOf, outputName } from '../names'
 import type { Plan, Planned } from '../plan'
 import { formatTimecode, frameDuration } from '../timecode'
 
-/** A range on the playhead's clock (0 is MediaInfo `start`), shared by Trim and Make GIF. */
+/** A range on the playhead's clock (0 is MediaInfo `start`), shared by Trim and Make animation. */
 export type TimeRange = { start: number; end: number }
 
 export type TrimMode = 'fast' | 'precise'

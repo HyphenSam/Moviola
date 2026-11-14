@@ -21,7 +21,7 @@ export function ExportsStrip({ exports, onRemove }: { exports: Export[]; onRemov
 
 function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) {
   const failed = item.error !== undefined
-  const image = item.kind === 'frame' || item.kind === 'gif'
+  const image = item.kind === 'frame' || item.kind === 'animation'
   const Icon = failed ? AlertCircle : item.kind === 'audio' ? AudioLines : image ? Image : Film
   // An image's size says nothing against the video's, so only audio and video show the change.
   const change = failed || image ? null : sizeChange(item.size, item.sourceSize)

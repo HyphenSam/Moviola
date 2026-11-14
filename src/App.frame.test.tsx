@@ -4,13 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { MediaInfo } from './lib/info'
-import { fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
+import type { WorkerCapabilities } from './lib/protocol'
+import { ALL_CAPABLE, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
 
 const tools = () => screen.getByRole('radiogroup', { name: 'Tools' })
 
 /** Opens `info` (an 83.5 s, 25 fps, 1080p H.264 + AAC MP4 unless told otherwise) on Grab frame. */
-async function openOnFrame(info: MediaInfo = fakeInfo()) {
-  const client = fakeClient((file) => ({ ...info, name: file.name }))
+async function openOnFrame(info: MediaInfo = fakeInfo(), capabilities: WorkerCapabilities = ALL_CAPABLE) {
+  const client = fakeClient((file) => ({ ...info, name: file.name }), capabilities)
   const user = userEvent.setup()
   render(<App webCodecs client={client} frames={fakeFrames()} />)
   await user.upload(screen.getByLabelText('Choose file'), new File([new Uint8Array(16)], info.name))
@@ -52,9 +53,33 @@ describe('Grab frame', () => {
       kind: 'frame',
       name: 'holiday frame 0-00-00.040.jpg',
       mimeType: 'image/jpeg',
+      quality: 0.9,
       lossless: false,
       time: 0.04,
     })
+  })
+
+  it('saves a WebP at quality 90, or losslessly with the switch on', async () => {
+    const { client, user } = await openOnFrame()
+    expect(screen.queryByRole('switch', { name: 'Lossless' })).not.toBeInTheDocument()
+    await user.click(format('WebP'))
+    expect(screen.getByText('A smaller file, at quality 90.')).toBeInTheDocument()
+    await user.click(save())
+    expect(client.jobs[0].plan).toMatchObject({
+      name: 'holiday frame 0-00-00.000.webp',
+      mimeType: 'image/webp',
+      quality: 0.9,
+    })
+    await user.click(screen.getByRole('switch', { name: 'Lossless' }))
+    expect(screen.getByText('Every pixel as decoded, in a smaller file than PNG.')).toBeInTheDocument()
+    await act(async () => client.jobs[0].finish({ size: 3, blob: new Blob(['webp']) }))
+    await user.click(save())
+    expect(client.jobs[1].plan).toMatchObject({ mimeType: 'image/webp', quality: 1 })
+  })
+
+  it('offers no WebP where the browser can’t make one', async () => {
+    await openOnFrame(fakeInfo(), { ...ALL_CAPABLE, encodeWebp: false })
+    expect(format('WebP')).toBeDisabled()
   })
 
   it('builds the image in memory without the save dialog, and offers it to download', async () => {

@@ -8,7 +8,7 @@ export function gifWriter({ width, height, frameRate, loop }: GifOptions) {
   const gif = GIFEncoder()
   let count = 0
   // GIF counts delays in hundredths of a second, which 15 fps doesn't divide. Each frame ends where
-  // its own time rounds to, so the delays alternate (7, 7, 6…) and a second of frames lasts a second.
+  // its own time rounds to, so the delays go 7, 6, 7… and a second of frames lasts a second.
   const hundredths = (frame: number) => Math.round((frame * 100) / frameRate)
   return {
     add(rgba: Uint8Array | Uint8ClampedArray) {

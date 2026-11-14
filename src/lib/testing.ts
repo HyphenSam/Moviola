@@ -11,6 +11,7 @@ export const ALL_CAPABLE: Capabilities = {
   saveToDisk: true,
   encodeVideo: { avc: true, hevc: true, vp9: true, av1: true },
   encodeAudio: { aac: true, opus: true, mp3: true, flac: true },
+  encodeWebp: true,
 }
 
 export function fakeVideoTrack(over: Partial<VideoTrack> = {}): VideoTrack {
@@ -110,7 +111,11 @@ export function fakeClient(
     jobs,
     keyframes,
     thumbnailed,
-    capabilities: async () => ({ encodeVideo: capabilities.encodeVideo, encodeAudio: capabilities.encodeAudio }),
+    capabilities: async () => ({
+      encodeVideo: capabilities.encodeVideo,
+      encodeAudio: capabilities.encodeAudio,
+      encodeWebp: capabilities.encodeWebp,
+    }),
     encodable: async (size) => encodable(size),
     keyframe: async (file, trackId, time) => {
       keyframes.push({ file, trackId, time })

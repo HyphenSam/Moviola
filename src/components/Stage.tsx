@@ -11,7 +11,7 @@ import { Button } from './ui/Button'
 
 /** The dark area where the picture plays: the player and timeline for the open file, the drop target
  * before one is open, or why this browser can't be used. `range` shows the range handles (Trim, Make
- * GIF), and `cut` where a fast trim really starts. */
+ * animation), and `cut` where a fast trim really starts. */
 export function Stage({
   source,
   webCodecs,

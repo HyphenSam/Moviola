@@ -4,7 +4,7 @@ import { formatTimecode } from '@/lib/timecode'
 import { Button } from './ui/Button'
 import { TimecodeField } from './ui/TimecodeField'
 
-/** The range tools' in and out points (Trim, Make GIF), each typed or set from the playhead, and the
+/** The range tools' in and out points (Trim, Make animation), each typed or set from the playhead, and the
  * resulting length. Typing a point moves the playhead there, so the frame can be judged. */
 export function RangeFields({
   duration,

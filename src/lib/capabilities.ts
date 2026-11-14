@@ -8,6 +8,8 @@ export type Capabilities = {
   encodeVideo: Partial<Record<VideoEncodeCodec, boolean>>
   /** Counting the add-on encoders, so all true where WebAssembly runs, apart from Opus. */
   encodeAudio: Partial<Record<AudioEncodeCodec, boolean>>
+  /** WebP images from a canvas, for Grab frame and Make animation. */
+  encodeWebp: boolean
 }
 
 export type VideoEncodeCodec = 'avc' | 'hevc' | 'vp9' | 'av1'
@@ -23,6 +25,7 @@ export const ADD_ON_CODECS: readonly AudioEncodeCodec[] = ['mp3', 'flac', 'aac']
 export type EncodeChecks = {
   canEncodeVideo: (codec: VideoEncodeCodec, size: { width: number; height: number }) => Promise<boolean>
   canEncodeAudio: (codec: AudioEncodeCodec) => Promise<boolean>
+  canEncodeWebp: () => Promise<boolean>
   wasm: boolean
 }
 
@@ -44,5 +47,6 @@ export async function probeCapabilities(checks: EncodeChecks): Promise<Omit<Capa
   return {
     encodeVideo: await videoEncodersAt(checks.canEncodeVideo, { width: 1920, height: 1080 }),
     encodeAudio: Object.fromEntries(AUDIO.map((c, i) => [c, audio[i] || (checks.wasm && ADD_ON_CODECS.includes(c))])),
+    encodeWebp: await ask(checks.canEncodeWebp),
   }
 }

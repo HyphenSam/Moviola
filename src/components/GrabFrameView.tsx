@@ -1,26 +1,38 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import type { FrameFormat } from '@/lib/plans/grab-frame'
+import type { FrameFormat, FrameSettings } from '@/lib/plans/grab-frame'
 import { formatTimecode } from '@/lib/timecode'
 import { Button } from './ui/Button'
 import { Segmented } from './ui/Segmented'
+import { Toggle } from './ui/Toggle'
+
+const ABOUT = {
+  png: 'Every pixel as decoded.',
+  jpeg: 'A smaller file, at quality 90.',
+  webp: 'A smaller file, at quality 90.',
+  'webp-lossless': 'Every pixel as decoded, in a smaller file than PNG.',
+}
 
 /** Grab frame's settings (SPEC.md 6.7): the playhead's time, which is the frame saved, with frame
- * steps beside it; the format; and what came of the last copy to the clipboard. */
+ * steps beside it; the format, with WebP's lossless switch (WebP only where `webp`, the browser can
+ * make one); and what came of the last copy to the clipboard. */
 export function GrabFrameView({
   duration,
   playhead,
-  format,
+  settings,
+  webp,
   copyNote,
   onStep,
-  onFormat,
+  onChange,
 }: {
   duration: number
   playhead: number
-  format: FrameFormat
+  settings: FrameSettings
+  webp: boolean
   copyNote: string | null
   onStep: (frames: number) => void
-  onFormat: (format: FrameFormat) => void
+  onChange: (change: Partial<FrameSettings>) => void
 }) {
+  const { format, lossless } = settings
   return (
     <>
       <section className="flex flex-col gap-2">
@@ -46,13 +58,14 @@ export function GrabFrameView({
           options={[
             { value: 'png', label: 'PNG' },
             { value: 'jpeg', label: 'JPEG' },
+            { value: 'webp', label: 'WebP', disabled: !webp },
           ]}
-          onChange={onFormat}
+          onChange={(f: FrameFormat) => onChange({ format: f })}
         />
-        <p className="text-xs text-ink-soft">
-          {format === 'png' ? 'Every pixel as decoded.' : 'A smaller file, at quality 90.'}
-        </p>
+        <p className="text-xs text-ink-soft">{ABOUT[format === 'webp' && lossless ? 'webp-lossless' : format]}</p>
       </section>
+
+      {format === 'webp' && <Toggle label="Lossless" checked={lossless} onChange={(l) => onChange({ lossless: l })} />}
 
       <p role="status" className="text-xs text-ink-soft empty:hidden">
         {copyNote}

@@ -31,9 +31,9 @@ export function AboutDialog() {
             </Dialog.Close>
           </div>
           <Dialog.Description className="mt-2 text-sm text-ink-soft">
-            Extracts audio, trims, compresses, changes containers, grabs frames and makes GIFs. Everything runs in your
-            browser on your own device; files are never uploaded. Streams are copied rather than re-encoded wherever
-            possible, and every action says which it does. Once installed, it works without a connection.
+            Extracts audio, trims, compresses, changes containers, grabs frames and makes animations. Everything runs in
+            your browser on your own device; files are never uploaded. Streams are copied rather than re-encoded
+            wherever possible, and every action says which it does. Once installed, it works without a connection.
           </Dialog.Description>
 
           <h3 className="mt-6 text-[13px] font-semibold">Software</h3>

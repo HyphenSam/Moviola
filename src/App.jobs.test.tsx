@@ -155,6 +155,7 @@ describe('Extract audio', () => {
       await openOnExtract(fakeInfo(), {
         encodeVideo: {},
         encodeAudio: { aac: true, opus: true, mp3: false, flac: false },
+        encodeWebp: true,
       })
       expect(await screen.findByText('This browser can’t encode MP3.')).toBeInTheDocument()
       expect(screen.getByText('This browser can’t encode FLAC.')).toBeInTheDocument()

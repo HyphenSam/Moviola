@@ -25,7 +25,7 @@ describe('worker handle', () => {
     expect(await run(fixture('notvideo.txt'))).toEqual([{ type: 'failed', id: 7, message: CANT_OPEN }])
   })
 
-  it('answers a capabilities request with what can be encoded; Node has no encoders but runs WebAssembly', async () => {
+  it('answers a capabilities request with what can be encoded; Node has no encoders or canvas but runs WebAssembly', async () => {
     const replies: Reply[] = []
     await handle({ type: 'capabilities', id: 8 }, (reply) => replies.push(reply))
     expect(replies).toEqual([
@@ -35,6 +35,7 @@ describe('worker handle', () => {
         value: {
           encodeVideo: { avc: false, hevc: false, vp9: false, av1: false },
           encodeAudio: { aac: true, opus: false, mp3: true, flac: true },
+          encodeWebp: false,
         },
       },
     ])

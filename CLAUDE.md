@@ -74,13 +74,13 @@ is lossless or re-encodes.
 - `src/lib/` pure logic: `info.ts` (the `MediaInfo` type and helpers), `capabilities.ts` (what this
   browser can decode and encode, as plain data), `containers.ts` (which container holds which codecs;
   the lossless audio container), `plans/` (one module per tool: settings + info + capabilities in,
-  `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `GifPlan`), `discarded.ts` (Mediabunny's discarded
+  `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
-  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
+  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
   `format-bytes.ts`.
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails and the page's
-  preview frames), `images.ts` (Grab frame and Make GIF, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
+  preview frames), `images.ts` (Grab frame and Make animation, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
   `gpu-scaler.ts` (resizes frames with WebGL for Mediabunny; the maths is in `src/lib/scale.ts`).
 - `src/worker/` the Web Worker: receives a `File` and a `Plan`, runs it with `src/media/`, posts
   progress, cancels on request.
@@ -160,7 +160,11 @@ discarded.
   the whole frame and returns `null` for anything else, and Mediabunny's canvas is the fallback where
   WebGL 2 is missing. Headless Firefox decodes in software, which hides most of the cost.
 - GIF delays are hundredths of a second, which 15 fps doesn't divide; `gif.ts` ends each frame where
-  its own time rounds to (7, 7, 6…), so a second of frames lasts a second.
+  its own time rounds to (7, 6, 7…), so a second of frames lasts a second. Animated WebP does the same
+  in milliseconds (67, 66, 67).
+- A canvas asked for a type it can't write (WebP in some browsers) quietly writes a PNG, so check the
+  blob's `type`. Chrome won't encode an `OffscreenCanvas` that has no context at all; Firefox will.
+  Both write lossless WebP at quality 1, and Chrome adds an ICC profile chunk to its stills.
 - The desktop app's built-in browser denies `clipboard-write` outright (even text), so Grab frame's Copy
   can't be checked there; check it through Playwright (Chrome or Firefox), with a real click.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at

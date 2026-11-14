@@ -14,7 +14,7 @@ const TOOLS = [
   'Remove audio',
   'Compress',
   'Grab frame',
-  'Make GIF',
+  'Make animation',
 ]
 
 const CANT_OPEN = 'Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.'
@@ -125,7 +125,7 @@ describe('App', () => {
     await choose(user, new File(['x'], 'song.m4a'))
     await waitFor(() => expect(tool('Convert audio')).toBeChecked())
     expect(fileCard()).toHaveTextContent('12.3 MB · 1:24 · 48 kHz, stereo')
-    for (const name of ['Change container', 'Remove audio', 'Compress', 'Grab frame', 'Make GIF']) {
+    for (const name of ['Change container', 'Remove audio', 'Compress', 'Grab frame', 'Make animation']) {
       expect(tool(name)).toHaveAttribute('aria-disabled', 'true')
       expect(tool(name)).toHaveAccessibleDescription('This file has no video.')
     }

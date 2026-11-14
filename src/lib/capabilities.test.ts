@@ -10,12 +10,14 @@ describe('probeCapabilities', () => {
         return codec === 'avc' || codec === 'vp9'
       },
       canEncodeAudio: async (codec) => codec === 'aac' || codec === 'opus',
+      canEncodeWebp: async () => true,
       wasm: false,
     })
     expect(asked).toEqual(['avc 1920x1080', 'hevc 1920x1080', 'vp9 1920x1080', 'av1 1920x1080'])
     expect(caps).toEqual({
       encodeVideo: { avc: true, hevc: false, vp9: true, av1: false },
       encodeAudio: { aac: true, opus: true, mp3: false, flac: false },
+      encodeWebp: true,
     })
   })
 
@@ -23,6 +25,7 @@ describe('probeCapabilities', () => {
     const caps = await probeCapabilities({
       canEncodeVideo: async () => false,
       canEncodeAudio: async () => false,
+      canEncodeWebp: async () => false,
       wasm: true,
     })
     // Opus has no add-on.
@@ -37,10 +40,14 @@ describe('probeCapabilities', () => {
       canEncodeAudio: async () => {
         throw new Error('no AudioEncoder')
       },
+      canEncodeWebp: async () => {
+        throw new Error('no OffscreenCanvas')
+      },
       wasm: false,
     })
     expect(caps.encodeVideo).toEqual({ avc: false, hevc: false, vp9: false, av1: false })
     expect(caps.encodeAudio).toEqual({ aac: false, opus: false, mp3: false, flac: false })
+    expect(caps.encodeWebp).toBe(false)
   })
 })
 

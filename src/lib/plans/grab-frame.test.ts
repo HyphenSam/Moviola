@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { fakeInfo, fakeVideoTrack } from '@/lib/testing'
-import { planGrabFrame } from './grab-frame'
+import { ALL_CAPABLE, fakeInfo, fakeVideoTrack } from '@/lib/testing'
+import type { MediaInfo } from '../info'
+import { planGrabFrame as planWith, type FrameSettings } from './grab-frame'
+
+const PNG: FrameSettings = { format: 'png', lossless: false }
+const planGrabFrame = (info: MediaInfo, time: number, settings: FrameSettings | FrameSettings['format']) =>
+  planWith(info, time, typeof settings === 'string' ? { ...PNG, format: settings } : settings, ALL_CAPABLE)
 
 describe('planGrabFrame', () => {
   it('saves the frame at the playhead as a PNG at the video’s full size, named with the time', () => {
@@ -9,16 +14,42 @@ describe('planGrabFrame', () => {
       kind: 'frame',
       name: 'holiday frame 0-01-23.456.png',
       mimeType: 'image/png',
+      quality: 1,
       lossless: false,
       time: 83.456,
     })
     expect(planned.caption).toBe('The full 1920 × 1080 frame.')
   })
 
-  it('writes a JPEG with the .jpg extension', () => {
+  it('writes a JPEG at quality 90 with the .jpg extension', () => {
     expect(planGrabFrame(fakeInfo(), 2, 'jpeg').plan).toMatchObject({
       name: 'holiday frame 0-00-02.000.jpg',
       mimeType: 'image/jpeg',
+      quality: 0.9,
+    })
+  })
+
+  it('writes a WebP at quality 90, or losslessly at quality 1, which is how canvases ask for lossless', () => {
+    expect(planGrabFrame(fakeInfo(), 2, 'webp').plan).toMatchObject({
+      name: 'holiday frame 0-00-02.000.webp',
+      mimeType: 'image/webp',
+      quality: 0.9,
+    })
+    expect(planGrabFrame(fakeInfo(), 2, { format: 'webp', lossless: true }).plan).toMatchObject({
+      name: 'holiday frame 0-00-02.000.webp',
+      mimeType: 'image/webp',
+      quality: 1,
+    })
+  })
+
+  it('leaves PNG and JPEG as they are when the WebP lossless switch is on', () => {
+    expect(planGrabFrame(fakeInfo(), 2, { format: 'jpeg', lossless: true }).plan).toMatchObject({ quality: 0.9 })
+  })
+
+  it('can’t write a WebP where the browser can’t', () => {
+    const settings: FrameSettings = { format: 'webp', lossless: false }
+    expect(planWith(fakeInfo(), 2, settings, { ...ALL_CAPABLE, encodeWebp: false })).toEqual({
+      problems: ['This browser can’t make WebP images. Choose PNG or JPEG.'],
     })
   })
 

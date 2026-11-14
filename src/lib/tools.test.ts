@@ -16,7 +16,7 @@ describe('toolStates', () => {
       'Remove audio',
       'Compress',
       'Grab frame',
-      'Make GIF',
+      'Make animation',
     ])
     expect(reasons(states)).toEqual({})
   })
@@ -29,7 +29,7 @@ describe('toolStates', () => {
       'remove-audio': needsVideo,
       compress: needsVideo,
       frame: needsVideo,
-      gif: needsVideo,
+      animation: needsVideo,
       container: needsVideo,
     })
   })

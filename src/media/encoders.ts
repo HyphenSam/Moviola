@@ -8,8 +8,17 @@ export const capabilities = (): Promise<WorkerCapabilities> =>
   probeCapabilities({
     canEncodeVideo: (codec, size) => canEncodeVideo(codec, size),
     canEncodeAudio: (codec) => canEncodeAudio(codec),
+    canEncodeWebp,
     wasm: typeof WebAssembly === 'object',
   })
+
+/** A canvas that can't write WebP quietly writes a PNG instead, so the type that comes back is the answer.
+ * Chrome won't encode a canvas that has no context, hence the `getContext`. */
+async function canEncodeWebp() {
+  const canvas = new OffscreenCanvas(1, 1)
+  canvas.getContext('2d')
+  return (await canvas.convertToBlob({ type: 'image/webp' })).type === 'image/webp'
+}
 
 /** Which video codecs this browser can encode at `size`. */
 export const encodableAt = (size: Size) => videoEncodersAt((codec, at) => canEncodeVideo(codec, at), size)
