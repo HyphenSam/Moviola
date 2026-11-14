@@ -34,8 +34,9 @@ Rules:
 - Components get React Testing Library tests for behaviour users see (`// @vitest-environment jsdom`
   at the top of the file). Test what the user does and sees, not implementation details.
 - Things only a real browser can show (WebCodecs decoding and encoding, playback, the save picker,
-  the service worker) are checked by hand in the browser after the unit tests pass. Check Chrome and
-  Firefox at least. Say what you checked when you report.
+  the service worker) are checked in a real browser after the unit tests pass: Chrome in the built-in
+  browser, Firefox through Playwright (the `playwright-cli` skill). Check both at least. Say what you
+  checked when you report.
 
 ## Commands
 
