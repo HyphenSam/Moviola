@@ -104,7 +104,7 @@ components:
 
 A bench you bring footage to: neutral surfaces, a rail of tools, a settings column of short labelled controls, and a dark stage where the picture plays with a timeline beneath it. Nothing on screen competes with the picture; the one amber accent marks the next thing to press, the current selection and whatever is in progress. The system is Bytesize's (itself Art Cleaner's), with its own accent so the three are told apart at a glance, and two changes for video: the stage is dark in both themes, and every action carries a "Lossless" or "Re-encodes" label.
 
-Density is moderate: compact 13–14 px labels, tight groups, generous separation between groups. Light and dark are equal citizens and follow the system setting. Motion is limited to 150–200 ms state changes.
+Density is moderate: compact 13–14 px labels, tight groups, generous separation between groups. Light and dark are equal citizens and follow the system setting unless one is chosen from the header's theme menu. Motion is limited to 150–200 ms state changes.
 
 **Key Characteristics:**
 - Zinc neutrals in OKLCH (hue 286), one amber accent (hue 55–70), the warm light of a projector lamp.
@@ -129,7 +129,7 @@ Neutral zinc greys with a single amber; the picture supplies every other colour.
 - **Ink** (ink, ink-soft): text and secondary text, both at least 4.5:1 on panel and canvas.
 - **Danger / OK** (danger, ok): failures and problems; finished exports and the "Lossless" badge.
 
-Dark mode redefines every token under `prefers-color-scheme: dark` in `src/index.css`: neutrals as Bytesize (canvas 0.165 L, panel 0.2 L, ink 0.965 L), stage 0.13 L, accent `oklch(0.78 0.15 70)`, accent-hover `oklch(0.82 0.14 72)`, accent-soft `oklch(0.3 0.05 60)`, accent-text and focus `oklch(0.82 0.13 75)`, danger `oklch(0.68 0.18 25)`, ok `oklch(0.72 0.14 155)`. accent-ink stays dark ink in both themes. Check every pair's contrast when changing a token.
+Dark mode redefines every token under `:root[data-theme='dark']` in `src/index.css` (`data-theme` is always the theme in use, set before the first paint by a script in `index.html` from the shared `theme` cookie or the system, then kept by `useTheme`; nothing in the CSS reads `prefers-color-scheme` itself): neutrals as Bytesize (canvas 0.165 L, panel 0.2 L, ink 0.965 L), stage 0.13 L, accent `oklch(0.78 0.15 70)`, accent-hover `oklch(0.82 0.14 72)`, accent-soft `oklch(0.3 0.05 60)`, accent-text and focus `oklch(0.82 0.13 75)`, danger `oklch(0.68 0.18 25)`, ok `oklch(0.72 0.14 155)`. accent-ink stays dark ink in both themes. Check every pair's contrast when changing a token.
 
 ### Named Rules
 **The Picture Owns Colour Rule.** Nothing but the amber accent and the two status colours carries chroma. The stage stays neutral so colour and compression artefacts can be judged.

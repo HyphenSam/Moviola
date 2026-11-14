@@ -1,6 +1,7 @@
 import { Info, X } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import { APP_NAME, SOURCE_URL } from '@/lib/brand'
+import { ICON_BUTTON } from './ui/Button'
 
 // The encoders Mediabunny's add-ons wrap, used where the browser has none of its own.
 const ENCODERS = [
@@ -12,11 +13,8 @@ const ENCODERS = [
 export function AboutDialog() {
   return (
     <Dialog.Root>
-      <Dialog.Trigger
-        aria-label="About"
-        className="flex size-8 items-center justify-center rounded-control text-ink-soft transition-colors duration-150 hover:bg-sunken hover:text-ink"
-      >
-        <Info className="size-4" strokeWidth={1.75} />
+      <Dialog.Trigger aria-label="About" className={ICON_BUTTON}>
+        <Info strokeWidth={1.75} />
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40" />

@@ -205,6 +205,12 @@ describe('App', () => {
     expect(client.probed).toEqual([])
   })
 
+  it('offers the theme menu, About and the sister apps in the header', () => {
+    setup()
+    const header = within(screen.getByRole('banner'))
+    expect(header.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Theme', 'About', 'Apps'])
+  })
+
   it('credits Mediabunny and the encoder libraries in About', async () => {
     const { user } = setup()
     await user.click(screen.getByRole('button', { name: 'About' }))

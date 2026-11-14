@@ -85,6 +85,15 @@ export default defineConfig({
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            // The app launcher's shared list and icons: shown from the cache
+            // at once (and offline), refreshed in the background.
+            urlPattern: ({ url }) => url.origin === 'https://apps.hyphensam.com',
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'hyphensam-apps', expiration: { maxEntries: 30 } },
+          },
+        ],
       },
     }),
     pagesLimit(),

@@ -17,7 +17,8 @@ function tokens(block: string): Record<string, Oklch> {
 }
 
 const light = tokens(css.match(/@theme\s*{([^}]*)}/)![1])
-const darkBlock = css.match(/@media \(prefers-color-scheme: dark\)\s*{\s*:root\s*{([^}]*)}/)
+// The dark theme keys off `data-theme` on <html>, set from the theme menu or the system (index.html).
+const darkBlock = css.match(/:root\[data-theme='dark'\]\s*{([^}]*)}/)
 const dark = { ...light, ...tokens(darkBlock![1]) }
 
 /** OKLCH to linear sRGB (Björn Ottosson's matrices), clipped to the gamut. */
@@ -95,6 +96,10 @@ it('stops animations rather than speeding them up when motion is reduced', () =>
   const reduced = css.match(/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n  }/)![1]
   expect(reduced).toMatch(/animation-iteration-count:\s*1 !important/)
   expect(reduced).toMatch(/scroll-behavior:\s*auto !important/)
+})
+
+it('leaves the dark theme to data-theme, so a chosen light theme wins over a dark system', () => {
+  expect(css).not.toMatch(/prefers-color-scheme/)
 })
 
 it('converts OKLCH white and black to the ends of sRGB', () => {

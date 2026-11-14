@@ -78,7 +78,7 @@ is lossless or re-encodes.
   `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
   size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
-  `format-bytes.ts`.
+  `format-bytes.ts`, `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list).
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails and the page's
   preview frames), `images.ts` (Grab frame and Make animation, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
@@ -87,7 +87,8 @@ is lossless or re-encodes.
   progress, cancels on request.
 - `src/components/` the UI (`ui/` holds the primitives). `src/App.tsx` puts it together; it takes the
   worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
-- `src/hooks/` state: `useSource` (the open file and its info), `useJob` (the running job), `usePlayer`.
+- `src/hooks/` state: `useSource` (the open file and its info), `useJob` (the running job), `usePlayer`,
+  `useTheme` (applies and remembers the theme).
 - `fixtures/` tiny media files made by `scripts/fixtures.sh`. Don't edit them by hand.
 
 ## How a job runs
@@ -188,6 +189,14 @@ discarded.
   from sneaking in. Everything is same-origin; a cross-origin resource (fonts, analytics, a CDN)
   will break unless it sends CORP headers.
 - WebCodecs needs a secure context: localhost or HTTPS.
+- The theme choice is a `theme` cookie on `Domain=hyphensam.com`, shared with the sister sites (Bytesize,
+  Art Cleaner); on localhost it stays on the host. `index.html` applies it before the first paint, and its
+  hex values and `THEME_COLOURS` in `src/lib/theme.ts` are the canvas colours of the theme-color metas.
+- The app launcher (grid button) reads `https://apps.hyphensam.com/apps.json` when first opened, a
+  separate static Worker (`../hyphensam-apps`) that every sister site reads, so a site is added there
+  once. It must send CORS and `Cross-Origin-Resource-Policy: cross-origin`, or COEP blocks it.
+  `FALLBACK_APPS` in `src/lib/apps.ts` is used until it arrives or if it can't; the service worker
+  caches the list and icons (stale while revalidate), so the launcher works offline after one opening.
 - The service worker precaches everything, the encoder add-ons included (about 2 MB of the 3.6 MB),
   so the whole app works offline after one visit. `scripts/precache.ts` fails the build if a built file
   is missing from `sw.js`'s list. vite-plugin-pwa adds the manifest's icons on its own as well as the

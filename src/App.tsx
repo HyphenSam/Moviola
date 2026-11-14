@@ -2,6 +2,7 @@ import { Download, X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
+import { AppLauncher } from './components/AppLauncher'
 import { ChangeContainerView } from './components/ChangeContainerView'
 import { CompressView } from './components/CompressView'
 import { ExportsStrip } from './components/ExportsStrip'
@@ -14,6 +15,7 @@ import { Logo } from './components/Logo'
 import { MediaInfoView } from './components/MediaInfoView'
 import { RemoveAudioView } from './components/RemoveAudioView'
 import { Stage } from './components/Stage'
+import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { TrimView } from './components/TrimView'
 import { Button } from './components/ui/Button'
@@ -314,7 +316,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 Install
               </Button>
             )}
+            <ThemeMenu />
             <AboutDialog />
+            <AppLauncher />
           </div>
         </header>
 

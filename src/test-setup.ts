@@ -25,6 +25,9 @@ if (typeof window !== 'undefined') {
   HTMLMediaElement.prototype.load = () => {}
   HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext
 
+  // Nor media queries: the system is always light.
+  window.matchMedia ??= () =>
+    ({ matches: false, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList
   let urls = 0
   URL.createObjectURL ??= () => `blob:test/${++urls}`
   URL.revokeObjectURL ??= () => {}
