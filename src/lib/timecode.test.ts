@@ -113,6 +113,17 @@ describe('frame stepping', () => {
     expect(stepFrames(7 * (1001 / 30000), 1, 30000 / 1001)).toBeCloseTo(8 * (1001 / 30000))
   })
 
+  it('steps on from a frame time the browser reports cut to the microsecond', () => {
+    // Chrome reads a seek to 1 / 30 back as 0.033333: still frame 1, so the next is frame 2.
+    for (const rate of [24, 30, 30000 / 1001, 60]) {
+      for (let k = 1; k <= 10; k++) {
+        const reported = Math.floor((k / rate) * 1e6) / 1e6
+        expect(stepFrames(reported, 1, rate)).toBeCloseTo((k + 1) / rate)
+        expect(stepFrames(reported, -1, rate)).toBeCloseTo((k - 1) / rate)
+      }
+    }
+  })
+
   it('never steps before 0', () => {
     expect(stepFrames(0, -1, 25)).toBe(0)
   })

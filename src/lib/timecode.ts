@@ -37,10 +37,11 @@ export function parseTimecode(text: string): number | null {
 export const frameDuration = (frameRate: number | null) => 1 / (frameRate ?? 30)
 
 /** The time `frames` frames on (or back) from the frame showing at `time`, on the frame grid. A
- * time inside a frame belongs to that frame; the small allowance keeps a boundary computed a hair
- * short (0.12 × 25 = 2.9999…) on its own frame. */
+ * time inside a frame belongs to that frame; the millisecond's allowance keeps a boundary that comes
+ * back a hair short on its own frame: floating point (0.12 × 25 = 2.9999…), or a media element
+ * cutting the time to the microsecond (Chrome reads a seek to 1 / 30 back as 0.033333). */
 export function stepFrames(time: number, frames: number, frameRate: number | null): number {
   const rate = frameRate ?? 30
-  const showing = Math.floor(time * rate + 1e-6)
+  const showing = Math.floor((time + 0.001) * rate)
   return Math.max(0, showing + frames) / rate
 }

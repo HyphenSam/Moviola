@@ -146,6 +146,12 @@ discarded.
   is faster (VP9 6×, AV1 1.4×) but overshoots 2.2–2.7×, and a Conversion can't set it anyway.
 - Firefox on Windows has no HEVC in WebCodecs, encoding or decoding, even with `media.hevc.enabled`
   and `dom.media.webcodecs.h265.enabled` set and Microsoft's HEVC extension installed; `<video>` plays it.
+- Edge on Windows decodes HEVC in WebCodecs but can't encode it: it ships Chromium's
+  `PlatformHEVCEncoderSupport` off (Edge 157), where Chrome on the same machine has it on. Launching Edge
+  with `--enable-features=PlatformHEVCEncoderSupport` turns it on. A playback test passing proves nothing
+  about encoding.
+- Chrome reports a media element's `currentTime` cut to the microsecond, so a seek to 1 / 30 reads back
+  as 0.033333, a hair short of frame 1. `stepFrames` allows a millisecond for this.
 - Headed Firefox decodes on the GPU, and Mediabunny resizes each frame through a 2D canvas (twice past a
   2× downscale, for mipmapping): about 22 ms a frame at 720p and 40 ms at 480p, which made a downscaled
   Compress slower than Original there (76 s and 111 s against 42 s on 90 s of 1080p). So the worker
