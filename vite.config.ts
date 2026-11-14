@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
@@ -6,6 +7,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { oversized } from './scripts/pages-limit.ts'
+import { unprecached } from './scripts/precache.ts'
 import { FILE_TYPES } from './src/lib/file-types.ts'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
@@ -34,6 +36,24 @@ function pagesLimit(): Plugin {
   }
 }
 
+/** Fails the build if the service worker would leave a file out, so the whole app works offline. Runs
+ * after vite-plugin-pwa has written sw.js. */
+function precacheAll(): Plugin {
+  return {
+    name: 'precache-all',
+    apply: 'build',
+    closeBundle: {
+      order: 'post',
+      sequential: true,
+      handler() {
+        const dist = join(root, 'dist')
+        const missing = unprecached(dist, readFileSync(join(dist, 'sw.js'), 'utf8'))
+        if (missing.length) throw new Error(`Not precached, so missing offline: ${missing.join(', ')}`)
+      },
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -41,7 +61,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      // The glob below takes every icon; listing them again only repeats them in the precache.
+      includeManifestIcons: false,
       manifest: {
         name: 'Moviola',
         short_name: 'Moviola',
@@ -61,12 +82,13 @@ export default defineConfig({
       },
       workbox: {
         // Everything, the encoder add-ons' wasm included, so the whole app works offline once installed.
-        globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm,webmanifest}'],
+        globPatterns: ['**/*.{js,mjs,css,html,svg,png,wasm}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
       },
     }),
     pagesLimit(),
+    precacheAll(),
   ],
   resolve: {
     alias: { '@': join(root, 'src') },

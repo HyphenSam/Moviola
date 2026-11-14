@@ -1,9 +1,14 @@
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { Running } from '@/hooks/useJob'
-import type { ReactNode } from 'react'
 import type { JobPlan, Planned } from '@/lib/plan'
 import { JobProgress } from './JobProgress'
 import { LosslessBadge } from './LosslessBadge'
 import { Button } from './ui/Button'
+
+// On narrow screens the action (or the progress in its place) is fixed to the foot of the screen
+// (DESIGN.md); what explains it stays in the settings, above where the bar sits once scrolled down.
+const BAR =
+  'max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-20 max-lg:border-t max-lg:border-line max-lg:bg-panel max-lg:px-4 max-lg:pt-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
 /** The foot of the settings column: what stops the job, the primary action with its badge and
  * caption, or the running job's progress in its place. */
@@ -26,34 +31,64 @@ export function JobAction({
   onStart: () => void
   onCancel: () => void
 }) {
-  if (running) return <JobProgress job={running} onCancel={onCancel} />
-  if (!planned) return null
+  const id = useId()
+  const box = useRef<HTMLDivElement>(null)
+  const busy = !!running
+  const was = useRef(busy)
+  // The action and Cancel replace each other as a job starts and ends. Focus on the one that went
+  // falls to the page; put it on the one that came instead, so the keyboard doesn't lose its place.
+  useEffect(() => {
+    if (was.current === busy) return
+    was.current = busy
+    if (document.activeElement && document.activeElement !== document.body) return
+    box.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  }, [busy])
+
+  const problems = !running && planned?.problems
   return (
-    <div className="flex flex-col gap-2.5">
-      {planned.problems && (
-        <ul className="flex flex-col gap-1 text-[13px] text-danger">
-          {planned.problems.map((p) => (
-            <li key={p}>{p}</li>
-          ))}
-        </ul>
-      )}
-      <div className="flex items-center gap-3">
-        <Button variant="primary" disabled={!planned.plan} onClick={onStart}>
-          {verb}
-        </Button>
-        {secondary}
-        {/* A frame isn't a copy of the stream, nor re-encoded as one: it has no badge (SPEC.md 6.7). */}
-        {planned.plan && planned.plan.kind !== 'frame' && (
-          <LosslessBadge lossless={planned.plan.lossless} label={planned.badge} />
+    <div ref={box} className="flex flex-col gap-2.5">
+      {/* There before any problem is, so a problem that a change of settings brings is announced. */}
+      <div id={`${id}-problems`} aria-live="polite" className="empty:hidden">
+        {problems && (
+          <ul className="flex flex-col gap-1 text-[13px] text-danger">
+            {problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
         )}
       </div>
-      {planned.caption && <p className="text-xs text-ink-soft">{planned.caption}</p>}
-      {planned.hints?.map((h) => (
-        <p key={h} className="text-xs text-ink-soft">
-          {h}
-        </p>
-      ))}
-      {hint && <p className="text-xs text-ink-soft">{hint}</p>}
+      {running ? (
+        <div className={BAR}>
+          <JobProgress job={running} onCancel={onCancel} />
+        </div>
+      ) : (
+        planned && (
+          <>
+            <div className={`flex items-center gap-3 ${BAR}`}>
+              <Button
+                variant="primary"
+                disabled={!planned.plan}
+                aria-describedby={problems ? `${id}-problems` : undefined}
+                onClick={onStart}
+              >
+                {verb}
+              </Button>
+              {secondary}
+              {/* A frame isn't a copy of the stream, nor re-encoded as one: it has no badge (SPEC.md 6.7). */}
+              {planned.plan && planned.plan.kind !== 'frame' && (
+                <LosslessBadge lossless={planned.plan.lossless} label={planned.badge} />
+              )}
+            </div>
+            {planned.caption && <p className="text-xs text-ink-soft">{planned.caption}</p>}
+            {planned.hints?.map((h) => (
+              <p key={h} className="text-xs text-ink-soft">
+                {h}
+              </p>
+            ))}
+            {hint && <p className="text-xs text-ink-soft">{hint}</p>}
+          </>
+        )
+      )}
     </div>
   )
 }

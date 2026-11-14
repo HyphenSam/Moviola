@@ -1,5 +1,6 @@
 import { BlobSource, CanvasSink, Input, type InputVideoTrack } from 'mediabunny'
 import { gifWriter } from '@/lib/gif'
+import { codecName } from '@/lib/info'
 import type { AnimationPlan, FramePlan } from '@/lib/plan'
 import { webpAnimationWriter } from '@/lib/webp'
 import { FORMATS } from './probe'
@@ -12,7 +13,9 @@ async function withVideo<T>(file: File, use: (track: InputVideoTrack, first: num
   const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
   try {
     const track = await input.getPrimaryVideoTrack()
-    if (!track || !(await track.canDecode())) throw new JobProblem('This browser can’t decode this video.')
+    if (!track) throw new JobProblem('This file has no video.')
+    if (!(await track.canDecode()))
+      throw new JobProblem(`This browser can’t decode ${codecName(await track.getCodec(), null)} video.`)
     return await use(track, await track.getFirstTimestamp())
   } finally {
     input.dispose()

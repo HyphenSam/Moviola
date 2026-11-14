@@ -48,6 +48,12 @@ describe('Player', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
   })
 
+  it('keeps the picture out of the tab order: the transport is the way in from the keyboard', async () => {
+    // Firefox makes a video without controls a tab stop with nothing to say.
+    const { media } = setup()
+    expect(media()).toHaveAttribute('tabindex', '-1')
+  })
+
   it('shows the position as the video moves', () => {
     const { media } = setup()
     act(() => {

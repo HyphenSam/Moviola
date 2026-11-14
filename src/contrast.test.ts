@@ -71,6 +71,8 @@ const PAIRS: [string, string, number][] = [
   ['stage-ink', 'stage', TEXT], // transport and labels on the dark stage
   ['stage-ink-soft', 'stage', TEXT],
   ['stage-line', 'stage', UI], // the empty stage's dashed drop target
+  ['focus', 'stage', UI], // focus rings on the transport and timeline
+  ['ink', 'danger-soft', TEXT], // the "can't open" banner
 ]
 
 describe.each([
@@ -86,6 +88,13 @@ describe.each([
   it('keeps the stage near-black', () => {
     expect(theme.stage[0]).toBeLessThanOrEqual(0.18)
   })
+})
+
+it('stops animations rather than speeding them up when motion is reduced', () => {
+  // A pulse squeezed into 0.01 ms but still repeating forever flickers; one run ends it.
+  const reduced = css.match(/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n  }/)![1]
+  expect(reduced).toMatch(/animation-iteration-count:\s*1 !important/)
+  expect(reduced).toMatch(/scroll-behavior:\s*auto !important/)
 })
 
 it('converts OKLCH white and black to the ends of sRGB', () => {

@@ -11,7 +11,8 @@ export function UpdateBanner() {
   return (
     <div
       role="status"
-      className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-panel bg-panel py-2 pr-2 pl-4 text-[13px] shadow-float ring-1 ring-line"
+      // Above the action, which narrow screens fix to the bottom of the screen.
+      className="fixed bottom-20 left-1/2 z-50 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 lg:bottom-4 items-center gap-3 rounded-panel bg-panel py-2 pr-2 pl-4 text-[13px] shadow-float ring-1 ring-line"
     >
       A new version is ready.
       <Button size="sm" variant="primary" onClick={() => void updateServiceWorker(true)}>

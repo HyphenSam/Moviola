@@ -65,9 +65,9 @@ describe('Change container', () => {
     const video = screen.getByRole('checkbox', { name: 'Video · H.264' })
     expect(video).not.toBeChecked()
     expect(video).toBeDisabled()
-    expect(video).toHaveAccessibleDescription('WebM can’t hold H.264')
+    expect(video).toHaveAccessibleDescription('WebM can’t hold H.264.')
     expect(screen.getByRole('checkbox', { name: 'Audio · AC-3 · French' })).toHaveAccessibleDescription(
-      'WebM can’t hold AC-3',
+      'WebM can’t hold AC-3.',
     )
     expect(
       screen.getByText('WebM can’t hold this video’s H.264. Use Compress to convert it to VP9 or AV1.'),

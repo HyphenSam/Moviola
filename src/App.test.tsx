@@ -115,7 +115,8 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App webCodecs client={client} frames={fakeFrames()} />)
     await choose(user, video('big.mkv'))
-    expect(screen.getByRole('status')).toHaveTextContent('Opening big.mkv…')
+    // The exports strip's live region is a status too; this one names the file.
+    expect(screen.getByText('Opening big.mkv…').closest('[role="status"]')).toBeInTheDocument()
     await act(async () => slow.resolve(fakeInfo({ name: 'big.mkv' })))
     expect(screen.queryByText('Opening big.mkv…')).not.toBeInTheDocument()
   })

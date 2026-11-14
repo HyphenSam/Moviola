@@ -31,6 +31,8 @@ export const canSaveToDisk = () => !!savePicker()
 export function useJob(client: WorkerClient) {
   const [running, setRunning] = useState<Running | null>(null)
   const [exports, setExports] = useState<Export[]>([])
+  // What became of the last job, in a sentence for screen readers.
+  const [note, setNote] = useState('')
   // The running job's ticket: replies for any other ticket are from a job that was cancelled.
   const current = useRef<{ ticket: number; cancel: () => void } | null>(null)
   const tickets = useRef(0)
@@ -88,6 +90,13 @@ export function useJob(client: WorkerClient) {
         setRunning(null)
         const id = nextExport.current++
         const check = 'sizeCheck' in plan && plan.sizeCheck && { sizeCheck: plan.sizeCheck }
+        setNote(
+          result.error !== undefined
+            ? `${name} wasn’t made. ${result.error}`
+            : result.url
+              ? `${name} is ready to download.`
+              : `Saved ${name}.`,
+        )
         setExports((list) => [
           { id, name, kind: plan.kind, sourceSize: file.size, ...check, ...result } as Export,
           ...list,
@@ -125,5 +134,5 @@ export function useJob(client: WorkerClient) {
     return () => window.removeEventListener('beforeunload', ask)
   }, [running])
 
-  return { running, exports, start, cancel, remove }
+  return { running, exports, note, start, cancel, remove }
 }

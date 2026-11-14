@@ -159,7 +159,7 @@ Dark mode redefines every token under `prefers-color-scheme: dark` in `src/index
 
 Desktop (1024 px and up): three columns. A 72 px **tool rail** (icon above a 12 px caption, one per tool), a 320 px **settings column** (the open file's card, the tool's settings scrolling, the primary action and its Lossless/Re-encodes badge pinned at the foot), and the **stage** filling the rest: the player, the transport and timeline beneath it, and the exports strip at the bottom. The page itself never scrolls.
 
-Mobile: one column in reading order: header, stage (player and timeline, at least 50% of the viewport height), a horizontally scrolling row of tool chips, settings, exports. The primary action is fixed to the bottom of the screen.
+Mobile: one column in reading order: header, stage (player and timeline, at least 50% of the viewport height), a horizontally scrolling row of tool chips, settings, exports. The primary action with its badge (or the progress in its place) is fixed to the bottom of the screen; its caption, hints and problems stay at the end of the settings, just above it. The update notice sits above the fixed action.
 
 Spacing: 4 px base; 8–12 px inside groups, 16–20 px panel padding, 28 px between settings sections.
 
@@ -198,7 +198,7 @@ A number field for times: `h:mm:ss.mmm` in the timecode face. Accepts `90`, `1:3
 The video sits centred on the stage, letterboxed. Beneath it, on the stage: play/pause, the timecode (position / duration), a mute toggle with volume, and frame-step buttons. Controls on the stage use light ink at 0.9 L for contrast on the dark stage in both themes. When the browser can't play the file natively, a small translucent chip says "Preview without sound" and the stage shows decoded frames instead.
 
 ### Timeline
-A 48 px strip of thumbnails across the stage's width, on a slightly lighter dark track. The playhead is a 2 px light line with a small handle at the top; click or drag anywhere to seek. Tools that use a range (Trim, Make animation) add two amber handles; outside the range the strip is dimmed to 35%. Fast trim draws a dashed light marker where the real cut will land (the keyframe) when it differs from the handle. Keyboard: the handles are sliders (arrow keys step a frame, Shift+arrow a second).
+A 48 px strip of thumbnails across the stage's width, on a slightly lighter dark track. The playhead is a 2 px light line with a small handle at the top; click or drag anywhere to seek. Tools that use a range (Trim, Make animation) add two amber handles; outside the range the strip is dimmed to 35%. Fast trim draws a dashed light marker where the real cut will land (the keyframe) when it differs from the handle. Keyboard: the handles are sliders (arrow keys step a frame, Shift+arrow a second). The strip clips anything drawn outside its children, focus rings included, so a focused slider puts the focus ring around the whole strip and changes its own colour: a handle turns light, the playhead turns focus amber with a larger knob.
 
 ### Progress
 Replaces the primary action while a job runs: an amber bar filling left to right, the percentage and time remaining in caption type, and a secondary "Cancel" button. Indeterminate phases (opening, finalising) use a pulsing bar.

@@ -108,7 +108,9 @@ export function Timeline({
         ref={strip}
         role="group"
         aria-label="Timeline"
-        className="relative h-12 touch-none overflow-hidden rounded-control bg-white/8 select-none"
+        // The strip clips what's inside it, focus rings included, so the strip shows the ring and the
+        // focused slider changes colour.
+        className="relative h-12 touch-none overflow-hidden rounded-control bg-white/8 select-none has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus"
         onPointerDown={(e) => grab('playhead', e)}
         onPointerMove={(e) => dragging.current && move(dragging.current, at(e.clientX))}
         onPointerUp={() => (dragging.current = null)}
@@ -135,12 +137,12 @@ export function Timeline({
         )}
         <div
           {...slider('playhead', 'Playhead', time)}
-          className="absolute inset-y-0 -ml-px w-0.5 bg-stage-ink focus-visible:outline-offset-2"
+          className="group absolute inset-y-0 -ml-px w-0.5 bg-stage-ink focus-visible:bg-focus focus-visible:outline-none"
           style={{ left: percent(time) }}
         >
           <span
             aria-hidden="true"
-            className="absolute -top-0.5 left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-stage-ink"
+            className="absolute -top-0.5 left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-stage-ink group-focus-visible:size-3.5 group-focus-visible:bg-focus"
           />
         </div>
         {range && grips && (
@@ -174,7 +176,7 @@ function Handle({
   return (
     <div
       {...props}
-      className={`absolute inset-y-0 flex w-3 cursor-ew-resize items-center justify-center bg-accent focus-visible:outline-offset-1 ${side === 'start' ? 'rounded-l-[4px]' : 'rounded-r-[4px]'}`}
+      className={`absolute inset-y-0 flex w-3 cursor-ew-resize items-center justify-center bg-accent focus-visible:bg-stage-ink focus-visible:outline-none ${side === 'start' ? 'rounded-l-[4px]' : 'rounded-r-[4px]'}`}
       style={{ left }}
     >
       <span aria-hidden="true" className="h-4 w-0.5 rounded-full bg-accent-ink/60" />

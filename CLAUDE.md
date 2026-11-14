@@ -47,6 +47,7 @@ pnpm test             # Vitest, once
 pnpm test:watch
 pnpm typecheck
 pnpm build            # typecheck + build to dist/; fails if any file is over the 25 MiB asset limit
+                      # or left out of the service worker's precache
 pnpm preview          # serves dist/ with the same headers as production
 pnpm fixtures         # regenerates fixtures/ with ffmpeg (needs ffmpeg on PATH; the output is committed)
 pnpm exec wrangler dev  # serves dist/ on the Workers runtime, reading public/_headers as production does
@@ -169,6 +170,11 @@ discarded.
   can't be checked there; check it through Playwright (Chrome or Firefox), with a real click.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
   once, so `probe` reads the length before the tracks.
+- Firefox makes a `<video>` without controls a tab stop with nothing to announce, so the player's has
+  `tabIndex={-1}`; the transport is the keyboard way in.
+- The encoder add-ons inline their WebAssembly in their JS chunks and start it in a blob worker, so
+  there's no `.wasm` file to precache: precaching the chunks is enough. Chrome lacks MP3 and FLAC
+  encoders, Firefox all three; both run every add-on offline from the precache.
 
 ## Hosting facts that bite
 
@@ -182,8 +188,10 @@ discarded.
   from sneaking in. Everything is same-origin; a cross-origin resource (fonts, analytics, a CDN)
   will break unless it sends CORP headers.
 - WebCodecs needs a secure context: localhost or HTTPS.
-- The service worker precaches everything, the encoder add-ons included (a few hundred kB), so the
-  whole app works offline once installed.
+- The service worker precaches everything, the encoder add-ons included (about 2 MB of the 3.6 MB),
+  so the whole app works offline after one visit. `scripts/precache.ts` fails the build if a built file
+  is missing from `sw.js`'s list. vite-plugin-pwa adds the manifest's icons on its own as well as the
+  glob's, so the config sets `includeManifestIcons: false`, or they're listed twice.
 
 ## Licences
 

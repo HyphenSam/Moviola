@@ -229,7 +229,8 @@ Rewraps the streams in another container without touching them.
   ("Already MKV."). The default is MP4, or MKV for an MP4 source; the choice carries over to the next
   file.
 - **Tracks**: every track with a checkbox (codec, language, name). Tracks the chosen container can
-  hold are ticked; tracks it can't hold are unticked, disabled and say why ("WebM can't hold H.264").
+  hold are ticked; tracks it can't hold are unticked, disabled and say why ("WebM can't hold H.264.",
+  or "Moviola can't tell which codec this track uses." when Mediabunny can't name it).
 - Unticking a track the container holds leaves it out. Unticking the video on purpose writes the audio on
   its own (`.m4a` from MP4); unticking everything is a problem ("Tick at least one track to keep.").
 - If no video track survives, problem: "WebM can't hold this video's H.264. Use Compress to convert
@@ -410,6 +411,9 @@ cheap) but never block the UI.
 - Cancel: `conversion.cancel()`, then `writable.abort()` when streaming. The export isn't added.
 - Errors become an export card in danger style with the message in plain words. Unknown errors keep
   Mediabunny's message after "Something went wrong:".
+- Each finished job is announced to screen readers in one sentence: "holiday.m4a is ready to
+  download.", "Saved holiday.m4a." or "holiday.m4a wasn't made." followed by the reason. Keyboard
+  focus moves from the action to Cancel when a job starts and back when it ends.
 
 ### Leaving the page
 While a job runs, `beforeunload` asks the browser to confirm.

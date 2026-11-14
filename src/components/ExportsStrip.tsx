@@ -1,21 +1,56 @@
 import { AlertCircle, AudioLines, Check, Download, Film, Image, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import type { Export } from '@/hooks/useJob'
 import { cn } from '@/lib/cn'
 import { formatSize } from '@/lib/info'
 import { sizeChange, sizeWarnings } from '@/lib/progress'
 import { Button } from './ui/Button'
 
-/** The results of this session's jobs, newest first, at the foot of the stage (DESIGN.md). */
-export function ExportsStrip({ exports, onRemove }: { exports: Export[]; onRemove: (id: number) => void }) {
-  if (!exports.length) return null
+/** The results of this session's jobs, newest first, at the foot of the stage (DESIGN.md). `note` says
+ * what became of the last job, for screen readers. */
+export function ExportsStrip({
+  exports,
+  note,
+  onRemove,
+}: {
+  exports: Export[]
+  note: string
+  onRemove: (id: number) => void
+}) {
+  const list = useRef<HTMLUListElement>(null)
+  // Where a removed card was, so focus can go to the card that takes its place.
+  const removed = useRef<number | null>(null)
+  useEffect(() => {
+    const at = removed.current
+    removed.current = null
+    if (at === null || (document.activeElement && document.activeElement !== document.body)) return
+    const buttons = list.current?.querySelectorAll<HTMLButtonElement>('button[data-remove]')
+    buttons?.[Math.min(at, buttons.length - 1)]?.focus()
+  }, [exports])
+
   return (
-    <section aria-label="Exports" className="border-t border-line bg-panel">
-      <ul className="flex gap-2 overflow-x-auto px-4 py-3 lg:px-5">
-        {exports.map((e) => (
-          <ExportCard key={e.id} item={e} onRemove={() => onRemove(e.id)} />
-        ))}
-      </ul>
-    </section>
+    <>
+      {/* Always there, so the first result is announced as well. */}
+      <p role="status" aria-label="Latest export" className="sr-only">
+        {note}
+      </p>
+      {exports.length > 0 && (
+        <section aria-label="Exports" className="order-5 border-t border-line bg-panel lg:order-none lg:col-start-3">
+          <ul ref={list} className="flex gap-2 overflow-x-auto px-4 py-3 lg:px-5">
+            {exports.map((e, i) => (
+              <ExportCard
+                key={e.id}
+                item={e}
+                onRemove={() => {
+                  removed.current = i
+                  onRemove(e.id)
+                }}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+    </>
   )
 }
 
@@ -66,7 +101,14 @@ function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) 
             Saved
           </span>
         ))}
-      <Button size="sm" variant="ghost" aria-label={`Remove ${item.name}`} className="px-1.5" onClick={onRemove}>
+      <Button
+        size="sm"
+        variant="ghost"
+        data-remove
+        aria-label={`Remove ${item.name}`}
+        className="px-1.5"
+        onClick={onRemove}
+      >
         <X />
       </Button>
     </li>

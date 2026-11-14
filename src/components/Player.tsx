@@ -159,7 +159,8 @@ function NativeMedia({
   }, [playing, report])
 
   if (kind === 'audio') return <audio ref={ref} src={url} preload="auto" />
-  return <video ref={ref} src={url} preload="auto" playsInline className="h-full w-full object-contain" />
+  // No controls of its own: the transport drives it. Firefox would still make it an unnamed tab stop.
+  return <video ref={ref} src={url} preload="auto" playsInline tabIndex={-1} className="h-full w-full object-contain" />
 }
 
 /** Decoded frames drawn on a canvas at the playhead; playing draws each frame at its time, or as

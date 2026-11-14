@@ -23,10 +23,10 @@ export function containerTracks(info: MediaInfo, container: ContainerChoice, cod
       .filter(Boolean)
       .join(' · '),
     reason: !track.codec
-      ? 'Moviola can’t tell which codec this uses'
+      ? 'Moviola can’t tell which codec this track uses.'
       : codecs[container].includes(track.codec)
         ? null
-        : `${CONTAINER_NAMES[container]} can’t hold ${codecName(track.codec, null)}`,
+        : `${CONTAINER_NAMES[container]} can’t hold ${codecName(track.codec, null)}.`,
   }))
 }
 

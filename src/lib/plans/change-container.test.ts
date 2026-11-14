@@ -62,15 +62,17 @@ describe('containerTracks', () => {
 
   it('says why a track can’t go into the chosen container, naming its codec', () => {
     const rows = containerTracks(ac3(), 'webm', CONTAINER_CODECS)
-    expect(rows.map((r) => r.reason)).toEqual(['WebM can’t hold H.264', 'WebM can’t hold AC-3'])
+    expect(rows.map((r) => r.reason)).toEqual(['WebM can’t hold H.264.', 'WebM can’t hold AC-3.'])
     expect(
       containerTracks(fakeInfo({ tracks: [fakeVideoTrack(), subtitles()] }), 'mov', CONTAINER_CODECS)[1].reason,
-    ).toBe('MOV can’t hold WebVTT')
+    ).toBe('MOV can’t hold WebVTT.')
   })
 
   it('says when Moviola can’t tell a track’s codec, so it can’t be copied', () => {
     const info = fakeInfo({ container: 'mov', tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: null })] })
-    expect(containerTracks(info, 'mkv', CONTAINER_CODECS)[1].reason).toBe('Moviola can’t tell which codec this uses')
+    expect(containerTracks(info, 'mkv', CONTAINER_CODECS)[1].reason).toBe(
+      'Moviola can’t tell which codec this track uses.',
+    )
   })
 })
 

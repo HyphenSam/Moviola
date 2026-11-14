@@ -295,7 +295,13 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
 
   return (
     <Tooltip.Provider delayDuration={300}>
-      <div className="flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[72px_320px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)]">
+      <div
+        className={cn(
+          'flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[72px_320px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:pb-0',
+          // Room at the foot for the action, which narrow screens fix to the bottom of the screen.
+          (planned || job.running) && 'pb-[calc(4rem+env(safe-area-inset-bottom))]',
+        )}
+      >
         <header className="flex h-14 items-center justify-between gap-2 border-b border-line bg-panel px-4 lg:col-span-3 lg:px-5">
           <div className="flex items-center gap-2.5">
             <Logo className="size-7" />
@@ -315,7 +321,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
         {/* The page's order is desktop's (tools, settings, stage); narrow screens move the stage up. */}
         <nav
           aria-label="Tool rail"
-          className="order-3 border-b border-line bg-panel lg:order-none lg:border-r lg:border-b-0"
+          className="order-3 border-b border-line bg-panel lg:order-none lg:row-span-2 lg:border-r lg:border-b-0"
         >
           <ToolRail
             tools={tools}
@@ -325,7 +331,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           />
         </nav>
 
-        <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:border-r lg:border-line">
+        <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:row-span-2 lg:border-r lg:border-line">
           {source && (
             <div className="border-b border-line px-5 py-4">
               <FileCard
@@ -432,8 +438,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             )}
           </div>
           {(planned || job.running) && (
-            // Pinned at the foot of the column; on narrow screens it sticks to the bottom of the screen.
-            <div className="sticky bottom-0 border-t border-line bg-panel px-5 py-4">
+            // Pinned at the foot of the column; on narrow screens the action itself is fixed to the bottom
+            // of the screen, and what explains it stays here.
+            <div className="px-5 pb-4 lg:sticky lg:bottom-0 lg:border-t lg:border-line lg:bg-panel lg:pt-4">
               <JobAction
                 planned={planned}
                 verb={verb}
@@ -505,8 +512,10 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             onMark={onMark}
             onBrowse={() => input.current?.click()}
           />
-          <ExportsStrip exports={job.exports} onRemove={job.remove} />
         </main>
+
+        {/* After the settings on narrow screens (DESIGN.md), at the foot of the stage on wide ones. */}
+        <ExportsStrip exports={job.exports} note={job.note} onRemove={job.remove} />
 
         <div
           aria-hidden="true"
