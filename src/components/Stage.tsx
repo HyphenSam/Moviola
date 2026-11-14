@@ -76,12 +76,13 @@ export function Stage({
           <div>
             <h2 className="text-lg leading-snug font-semibold">Drop a video here</h2>
             <p className="mt-1 text-xs text-stage-ink-soft">
-              MP4, MOV, MKV, WebM or MPEG-TS video, or an audio file. Nothing is uploaded.
+              MP4, MOV, MKV, WebM or MPEG-TS video, or an audio file. You can also paste from the clipboard.
             </p>
           </div>
           <Button variant="primary" onClick={onBrowse}>
             Choose file
           </Button>
+          <p className="mt-4 text-xs text-stage-ink-soft">Runs on your device. Nothing is uploaded.</p>
         </div>
       )}
     </div>

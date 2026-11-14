@@ -157,7 +157,7 @@ Dark mode redefines every token under `:root[data-theme='dark']` in `src/index.c
 
 ## Layout
 
-Desktop (1024 px and up): three columns. A 72 px **tool rail** (icon above a 12 px caption, one per tool), a 320 px **settings column** (the open file's card, the tool's settings scrolling, the primary action and its Lossless/Re-encodes badge pinned at the foot), and the **stage** filling the rest: the player, the transport and timeline beneath it, and the exports strip at the bottom. The page itself never scrolls.
+Desktop (1024 px and up): three columns. A 72 px **tool rail** (icon above a 12 px caption, one per tool), a 320 px **settings column** (the open file's card, the tool's settings scrolling, the primary action and its Lossless/Re-encodes badge pinned at the foot), and the **stage** filling the rest: the player, the transport and timeline beneath it, and the exports strip at the bottom. The header (name, theme, About, the app launcher) sits over the rail and the settings column only, as on the sister sites, so the stage runs the full height of the window. The page itself never scrolls.
 
 Mobile: one column in reading order: header, stage (player and timeline, at least 50% of the viewport height), a horizontally scrolling row of tool chips, settings, exports. The primary action with its badge (or the progress in its place) is fixed to the bottom of the screen; its caption, hints and problems stay at the end of the settings, just above it. The update notice sits above the fixed action.
 

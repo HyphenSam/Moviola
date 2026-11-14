@@ -35,7 +35,7 @@ export function ExportsStrip({
         {note}
       </p>
       {exports.length > 0 && (
-        <section aria-label="Exports" className="order-5 border-t border-line bg-panel lg:order-none lg:col-start-3">
+        <section aria-label="Exports" className="order-5 border-t border-line bg-panel lg:order-none lg:col-start-3 lg:row-start-3">
           <ul ref={list} className="flex gap-2 overflow-x-auto px-4 py-3 lg:px-5">
             {exports.map((e, i) => (
               <ExportCard

@@ -260,8 +260,8 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
       : null
 
-  // Files dropped anywhere on the window. Always cancel, or the browser opens what's dropped in
-  // place of the app.
+  // Files dropped or pasted anywhere on the window. Always cancel a drop, or the browser opens what's
+  // dropped in place of the app. A paste with no files (text into a field) is left alone.
   useEffect(() => {
     const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types ?? []).includes('Files')
     const over = (e: DragEvent) => {
@@ -277,13 +277,19 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
       const dropped = e.dataTransfer?.files?.[0]
       if (webCodecs && dropped) open(dropped)
     }
+    const paste = (e: ClipboardEvent) => {
+      const pasted = e.clipboardData?.files?.[0]
+      if (webCodecs && pasted) open(pasted)
+    }
     window.addEventListener('dragover', over)
     window.addEventListener('dragleave', leave)
     window.addEventListener('drop', drop)
+    window.addEventListener('paste', paste)
     return () => {
       window.removeEventListener('dragover', over)
       window.removeEventListener('dragleave', leave)
       window.removeEventListener('drop', drop)
+      window.removeEventListener('paste', paste)
     }
   }, [webCodecs, open])
 
@@ -304,7 +310,8 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           (planned || job.running) && 'pb-[calc(4rem+env(safe-area-inset-bottom))]',
         )}
       >
-        <header className="flex h-14 items-center justify-between gap-2 border-b border-line bg-panel px-4 lg:col-span-3 lg:px-5">
+        {/* Over the rail and settings only, as on the sister sites, so the stage runs the full height. */}
+        <header className="flex h-14 items-center justify-between gap-2 border-b border-line bg-panel px-4 lg:col-span-2 lg:row-start-1 lg:border-r lg:px-5">
           <div className="flex items-center gap-2.5">
             <Logo className="size-7" />
             <span className="text-[15px] font-semibold">{APP_NAME}</span>
@@ -325,7 +332,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
         {/* The page's order is desktop's (tools, settings, stage); narrow screens move the stage up. */}
         <nav
           aria-label="Tool rail"
-          className="order-3 border-b border-line bg-panel lg:order-none lg:row-span-2 lg:border-r lg:border-b-0"
+          className="order-3 border-b border-line bg-panel lg:order-none lg:col-start-1 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-b-0"
         >
           <ToolRail
             tools={tools}
@@ -335,7 +342,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           />
         </nav>
 
-        <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:row-span-2 lg:border-r lg:border-line">
+        <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-line">
           {source && (
             <div className="border-b border-line px-5 py-4">
               <FileCard
@@ -466,7 +473,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           )}
         </aside>
 
-        <main className="order-2 flex min-h-[55dvh] min-w-0 flex-col lg:order-none lg:min-h-0">
+        <main className="order-2 flex min-h-[55dvh] min-w-0 flex-col lg:order-none lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:min-h-0">
           {webCodecs && (
             <>
               <label className="sr-only" htmlFor="choose-file">

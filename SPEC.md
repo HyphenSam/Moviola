@@ -24,8 +24,8 @@ don't build it).
 
 ## 3. Opening a file
 
-- Drag and drop onto the window, the "Choose file" button, or the installed app's file handler
-  (`launchQueue`, manifest `file_handlers` for video and audio types).
+- Drag and drop onto the window, pasting a file anywhere on the page, the "Choose file" button, or the
+  installed app's file handler (`launchQueue`, manifest `file_handlers` for video and audio types).
 - Accepted: MP4, M4V, MOV, MKV, WebM, TS/M2TS/MTS, and audio files MP3, M4A, WAV, FLAC, OGG/OPUS,
   AAC. The file input's `accept` lists these extensions; dropping anything else is still tried,
   because extensions lie.

@@ -56,7 +56,9 @@ describe('App', () => {
     setup()
     expect(screen.getByText('Drop a video here')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose file' })).toBeInTheDocument()
-    expect(screen.getByText(/nothing is uploaded/i)).toBeInTheDocument()
+    expect(screen.getByText(/paste from the clipboard/i)).toBeInTheDocument()
+    // Said once, on its own line, as on the sister sites.
+    expect(screen.getByText(/nothing is uploaded/i)).toHaveTextContent(/^Runs on your device\. Nothing is uploaded\.$/)
   })
 
   it('opens a file chosen with the picker: the file card, the tools and Media info', async () => {
@@ -79,6 +81,19 @@ describe('App', () => {
     fireEvent.drop(window, { dataTransfer: { files: [new File(['x'], 'clip.weird')], types: ['Files'] } })
     await waitFor(() => expect(fileCard()).toHaveTextContent('clip.weird'))
     expect(client.probed.map((f) => f.name)).toEqual(['clip.weird'])
+  })
+
+  it('opens a file pasted anywhere on the page', async () => {
+    const { client } = setup()
+    fireEvent.paste(window, { clipboardData: { files: [video('pasted.mov')] } })
+    await waitFor(() => expect(fileCard()).toHaveTextContent('pasted.mov'))
+    expect(client.probed.map((f) => f.name)).toEqual(['pasted.mov'])
+  })
+
+  it('leaves a paste with no files alone', () => {
+    const { client } = setup()
+    fireEvent.paste(window, { clipboardData: { files: [] } })
+    expect(client.probed).toEqual([])
   })
 
   it('opens a file the installed app was launched with', async () => {
