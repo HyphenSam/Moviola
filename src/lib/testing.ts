@@ -29,6 +29,7 @@ export function fakeVideoTrack(over: Partial<VideoTrack> = {}): VideoTrack {
     height: 1080,
     rotation: 0,
     frameRate: 25,
+    reordered: false,
     colour: { hdr: false },
     ...over,
   }
@@ -157,8 +158,9 @@ export function fakeClient(
 }
 
 /** Frames for the file card and the fallback preview. jsdom can't draw, so each frame is a blank
- * stand-in at 25 fps; `opened` lists the files asked for, `disposed` counts the ones let go. */
-export function fakeFrames(): OpenFrames & { opened: File[]; disposed: number } {
+ * stand-in at 25 fps; `opened` lists the files asked for, `asked` the times of single frames asked
+ * for, `disposed` counts the ones let go. */
+export function fakeFrames(): OpenFrames & { opened: File[]; asked: number[]; disposed: number } {
   const frame = (t: number): Frame => ({
     image: { width: 320, height: 180 } as Frame['image'],
     timestamp: Math.floor(t * 25) / 25,
@@ -168,14 +170,14 @@ export function fakeFrames(): OpenFrames & { opened: File[]; disposed: number } 
     (file: File): FrameSource => {
       open.opened.push(file)
       return {
-        frameAt: async (t) => frame(t),
+        frameAt: async (t) => (open.asked.push(t), frame(t)),
         framesFrom: async function* (t) {
           for (let i = 0; i < 3; i++) yield frame(t + i * 0.04)
         },
         dispose: () => void open.disposed++,
       }
     },
-    { opened: [] as File[], disposed: 0 },
+    { opened: [] as File[], asked: [] as number[], disposed: 0 },
   )
   return open
 }

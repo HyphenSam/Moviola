@@ -36,6 +36,8 @@ export type VideoTrack = Common & {
   height: number
   rotation: Rotation
   frameRate: number | null
+  /** Frames stored out of display order (B-frames), which Firefox seeks short in Matroska. */
+  reordered: boolean
   colour: { primaries?: string; transfer?: string; matrix?: string; fullRange?: boolean; hdr: boolean }
 }
 export type AudioTrack = Common & {

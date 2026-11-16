@@ -74,6 +74,7 @@ type VideoTrack = Common & {
   width: number; height: number // display size, after pixel aspect ratio and rotation
   rotation: 0 | 90 | 180 | 270
   frameRate: number | null
+  reordered: boolean // frames stored out of display order (B-frames), from the first packets
   colour: { primaries?: string; transfer?: string; matrix?: string; fullRange?: boolean; hdr: boolean }
 }
 type AudioTrack = Common & {
@@ -98,7 +99,9 @@ a normal machine.
   its timestamps, Firefox from its first one), so its position once the first frame is in is taken
   as the playhead's 0, and times are translated both ways. Its length is the probed one: reported
   times stay within 0 to `duration`, playing stops there, and an element that disagrees by more
-  than a frame is logged once.
+  than a frame is logged once. Where the video is Matroska with frames stored out of display order
+  (B-frames), which Firefox seeks up to 4 frames short, the paused picture is the frame decoded at
+  the playhead with `CanvasSink`, drawn over the video; playing shows the video.
 - Otherwise (MKV in Safari, HEVC without hardware support, a picture that starts well after the
   element's 0 as in Firefox's late-starting MP4, and so on), show decoded frames with
   Mediabunny's `CanvasSink` at the playhead, no sound, and the chip "Preview without sound". Playing

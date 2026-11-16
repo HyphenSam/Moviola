@@ -221,6 +221,48 @@ describe('Player', () => {
     expect(screen.queryByRole('button', { name: 'Next frame' })).not.toBeInTheDocument()
   })
 
+  describe('an MKV with frames stored out of display order', () => {
+    // Firefox seeks these up to 4 frames short (CLAUDE.md), and nothing on the element says so; the
+    // frame decoded at the playhead, as Grab frame saves it, covers the picture while paused.
+    const mkv = () => fakeInfo({ name: 'film.mkv', container: 'mkv', tracks: [fakeVideoTrack({ reordered: true })] })
+    const still = (view: ReturnType<typeof render>) => view.container.querySelector('canvas')
+
+    it('shows the decoded frame at the playhead over the video while paused', async () => {
+      const { frames, file, user, view } = setup(mkv())
+      await waitFor(() => expect(frames.asked).toEqual([0]))
+      expect(frames.opened).toEqual([file])
+      expect(still(view)).toBeVisible()
+      await user.click(screen.getByRole('button', { name: 'Next frame' }))
+      await waitFor(() => expect(frames.asked.at(-1)).toBe(0.04))
+      expect(screen.queryByText('Preview without sound')).not.toBeInTheDocument()
+    })
+
+    it('lets the video show while playing, and covers it again where it paused', async () => {
+      const { frames, media, user, view } = setup(mkv())
+      await user.click(screen.getByRole('button', { name: 'Play' }))
+      expect(still(view)).not.toBeVisible()
+      tick(media()!, 1.5)
+      await user.click(screen.getByRole('button', { name: 'Pause' }))
+      expect(still(view)).toBeVisible()
+      await waitFor(() => expect(frames.asked.at(-1)).toBe(1.5))
+    })
+
+    it.each([
+      [
+        'an MKV stored in display order',
+        fakeInfo({ container: 'mkv', tracks: [fakeVideoTrack({ reordered: false })] }),
+      ],
+      [
+        'an MP4 with B-frames, which every browser seeks exactly',
+        fakeInfo({ tracks: [fakeVideoTrack({ reordered: true })] }),
+      ],
+    ])('leaves %s to the browser', (_, info) => {
+      const { frames, view } = setup(info)
+      expect(still(view)).toBeNull()
+      expect(frames.opened).toEqual([])
+    })
+  })
+
   describe('a file whose first timestamp is 10 s in', () => {
     // As h264-aac-late.mp4 probes: the playhead's 0 is the file's 9.978 s.
     const late = () => fakeInfo({ start: 9.978, duration: 4.022 })

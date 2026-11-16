@@ -4,7 +4,7 @@ import type { PlayerControls } from '@/hooks/usePlayer'
 import { videoTrack, type MediaInfo } from '@/lib/info'
 import { shortcutFor } from '@/lib/shortcuts'
 import { formatDuration } from '@/lib/timecode'
-import type { FrameSource, OpenFrames } from '@/media/frames'
+import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
 import { Transport } from './Transport'
 
 // The fallback preview's frames fit this box; plenty for judging the picture, quick to decode.
@@ -31,6 +31,10 @@ export function Player({
   const video = videoTrack(info)
   const [mode, setMode] = useState<'native' | 'frames' | 'none'>('native')
   const { report } = player
+  // Firefox seeks H.264 with B-frames in Matroska up to 4 frames short, and nothing on the element
+  // says so (CLAUDE.md). Covering the paused picture with the frame decoded at the playhead shows what
+  // Trim and Grab frame use; other browsers land on that frame anyway.
+  const cover = mode === 'native' && !!video?.reordered && (info.container === 'mkv' || info.container === 'webm')
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,6 +86,7 @@ export function Player({
             </Unavailable>
           )}
         </div>
+        {cover && <PausedFrame file={file} frames={frames} player={player} />}
         {mode === 'frames' && (
           <span className="absolute top-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-xs text-stage-ink backdrop-blur-sm">
             Preview without sound
@@ -230,15 +235,7 @@ function FrameView({ file, frames, player }: { file: File; frames: OpenFrames; p
     // Each seek or play bumps this, so a slower earlier draw or loop gives way to the newest.
     let generation = 0
 
-    const draw = (image: CanvasImageSource & { width: number; height: number }) => {
-      const c = canvas.current
-      if (!c) return
-      if (c.width !== image.width || c.height !== image.height) {
-        c.width = image.width
-        c.height = image.height
-      }
-      c.getContext('2d')?.drawImage(image, 0, 0)
-    }
+    const draw = (image: Frame['image']) => canvas.current && drawOn(canvas.current, image)
 
     const show = async (t: number) => {
       const mine = ++generation
@@ -281,6 +278,45 @@ function FrameView({ file, frames, player }: { file: File; frames: OpenFrames; p
   }, [file, frames, backend, report, now, duration])
 
   return <canvas ref={canvas} className="h-full w-full object-contain" />
+}
+
+/** The frame decoded at the playhead, over the video while it's paused; hidden while it plays. */
+function PausedFrame({ file, frames, player }: { file: File; frames: OpenFrames; player: PlayerControls }) {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const source = useRef<FrameSource | null>(null)
+  const { time, playing } = player
+
+  useEffect(() => {
+    const s = frames(file, PREVIEW_BOX)
+    source.current = s
+    return () => {
+      source.current = null
+      s.dispose()
+    }
+  }, [file, frames])
+
+  useEffect(() => {
+    if (playing) return
+    // A later seek's frame wins over a slower earlier one; reads cut short by disposing fail quietly.
+    let current = true
+    source.current
+      ?.frameAt(time)
+      .then((frame) => frame && current && canvas.current && drawOn(canvas.current, frame.image))
+      .catch(() => {})
+    return () => {
+      current = false
+    }
+  }, [time, playing, file, frames])
+
+  return <canvas ref={canvas} hidden={playing} className="absolute inset-0 h-full w-full object-contain" />
+}
+
+function drawOn(c: HTMLCanvasElement, image: Frame['image']) {
+  if (c.width !== image.width || c.height !== image.height) {
+    c.width = image.width
+    c.height = image.height
+  }
+  c.getContext('2d')?.drawImage(image, 0, 0)
 }
 
 function AudioPanel({ info, children }: { info: MediaInfo; children: React.ReactNode }) {

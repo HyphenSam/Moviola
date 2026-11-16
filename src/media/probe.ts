@@ -37,6 +37,8 @@ export const FORMATS = new Map<InputFormat, Container>([
 
 // Enough packets for a fair bitrate and frame rate without reading a long file to the end.
 const STATS_PACKETS = 1000
+// B-frames come within a group's first few frames; this many packets leaves room for a slow start.
+const ORDER_PACKETS = 100
 
 /** Reads what Moviola needs to know about a file. Only the parts of the file Mediabunny asks for are
  * read (the header, the index and the first packets), never the whole of it. */
@@ -102,6 +104,19 @@ export async function keyTimestamp(track: InputTrack, timestamp: number): Promis
   return packet?.timestamp ?? null
 }
 
+/** Whether a video track stores frames out of display order (B-frames), from its first packets in
+ * decode order: an encoder that uses B-frames uses them from the first group on. */
+async function storedOutOfOrder(track: InputTrack): Promise<boolean> {
+  let last = -Infinity
+  let count = 0
+  for await (const packet of new EncodedPacketSink(track).packets(undefined, undefined, { metadataOnly: true })) {
+    if (packet.timestamp < last) return true
+    last = packet.timestamp
+    if (++count >= ORDER_PACKETS) break
+  }
+  return false
+}
+
 /** FLAC's bits per sample, from the STREAMINFO block its decoder description starts with ("fLaC",
  * a 4-byte block header, then 10 bytes of block and frame sizes, 20 bits of sample rate, 3 of
  * channels and 5 of bits per sample, less one). */
@@ -137,11 +152,12 @@ async function describeTrack(track: InputTrack): Promise<Track | null> {
   }
 
   if (track.isVideoTrack()) {
-    const [width, height, rotation, colour] = await Promise.all([
+    const [width, height, rotation, colour, reordered] = await Promise.all([
       track.getDisplayWidth(),
       track.getDisplayHeight(),
       track.getRotation(),
       track.getColorSpace(),
+      storedOutOfOrder(track),
     ])
     return {
       ...common,
@@ -150,6 +166,7 @@ async function describeTrack(track: InputTrack): Promise<Track | null> {
       height,
       rotation,
       frameRate: stats.averagePacketRate > 0 ? stats.averagePacketRate : null,
+      reordered,
       colour: {
         ...(colour.primaries && { primaries: colour.primaries }),
         ...(colour.transfer && { transfer: colour.transfer }),

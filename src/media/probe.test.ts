@@ -154,6 +154,16 @@ describe('probe', () => {
     expect(audio(await probe(fixture(name)))[0].bitDepth).toBe(bits)
   })
 
+  // x264 stores B-frames after the frame they lean on; VP9 stores every frame in display order.
+  it.each([
+    ['h264-aac-2audio.mkv', true],
+    ['h264-aac-late.mkv', true],
+    ['h264-aac.mp4', true],
+    ['vp9-opus.webm', false],
+  ])('says whether %s stores its frames out of display order: %s', async (name, reordered) => {
+    expect(video(await probe(fixture(name)))[0].reordered).toBe(reordered)
+  })
+
   it('refuses a file that isn’t media with the sentence the user sees', async () => {
     await expect(probe(fixture('notvideo.txt'))).rejects.toThrow(CANT_OPEN)
     expect(CANT_OPEN).toBe('Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.')

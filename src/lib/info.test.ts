@@ -30,6 +30,7 @@ const video = (over: Partial<Extract<MediaInfo['tracks'][number], { kind: 'video
   height: 1080,
   rotation: 0 as const,
   frameRate: 29.97,
+  reordered: true,
   colour: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false, hdr: false },
   ...over,
 })

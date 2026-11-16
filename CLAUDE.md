@@ -139,10 +139,15 @@ discarded.
   frames stored 0 4 2 1 3 8…, frame 3 "ends" at 8, so frames 4 to 7 show frame 3 and no seek reaches
   them. Without B-frames (`-bf 0`, all-intra), VP9 in MKV, and MP4 land on the frame, as Chrome does on
   all of them. `currentTime` and `requestVideoFrameCallback`'s `mediaTime` both echo the time asked, so
-  the player can't see the miss; the playhead, Trim and Grab frame are right and only Firefox's picture
-  is early. Without cues it's worse: seeks land on a keyframe up to 2 s off. Its 0 for a late WebM with
-  Opus is after the Opus pre-skip, 6.5 ms past the probed start, which shows the next frame when the
-  playhead is within that of one.
+  nothing on the element shows the miss. So for Matroska whose video is stored out of order
+  (`VideoTrack.reordered`, from the first 100 packets), the player covers the paused video with the
+  frame decoded at the playhead, in every browser; playing shows the video. Without cues it's worse:
+  seeks land on a keyframe up to 2 s off. Its 0 for a late WebM with Opus is after the Opus pre-skip,
+  6.5 ms past the probed start, which shows the next frame when the playhead is within that of one.
+- Chrome's `<video>` and its WebCodecs decode drawn to a canvas disagree on the colours of H.264
+  without colour tags (the video's greens are brighter, as BT.601; 30% of the fixture's pixels differ by
+  more than 24), so thumbnails, Grab frame and the paused cover differ from Chrome's playback there.
+  Tagged BT.601 is identical and tagged BT.709 within a few levels. Firefox's two agree.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream
