@@ -79,11 +79,13 @@ is lossless or re-encodes.
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
   size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
   `format-bytes.ts`, `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
-  checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list).
+  checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list), `colour.ts` (the
+  colour space a browser's player assumes for a track).
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails and the page's
   preview frames), `images.ts` (Grab frame and Make animation, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
-  `gpu-scaler.ts` (resizes frames with WebGL for Mediabunny; the maths is in `src/lib/scale.ts`).
+  `gpu-scaler.ts` (resizes frames with WebGL for Mediabunny; the maths is in `src/lib/scale.ts`),
+  `colour.ts` (makes a track decode in the colour space the player shows it in).
 - `src/worker/` the Web Worker: receives a `File` and a `Plan`, runs it with `src/media/`, posts
   progress, cancels on request.
 - `src/components/` the UI (`ui/` holds the primitives). `src/App.tsx` puts it together; it takes the
@@ -144,10 +146,17 @@ discarded.
   frame decoded at the playhead, in every browser; playing shows the video. Without cues it's worse:
   seeks land on a keyframe up to 2 s off. Its 0 for a late WebM with Opus is after the Opus pre-skip,
   6.5 ms past the probed start, which shows the next frame when the playhead is within that of one.
-- Chrome's `<video>` and its WebCodecs decode drawn to a canvas disagree on the colours of H.264
-  without colour tags (the video's greens are brighter, as BT.601; 30% of the fixture's pixels differ by
-  more than 24), so thumbnails, Grab frame and the paused cover differ from Chrome's playback there.
-  Tagged BT.601 is identical and tagged BT.709 within a few levels. Firefox's two agree.
+- Chrome's `<video>` reads a video's colour space only when its tags are complete (primaries, transfer
+  and matrix). Otherwise, a matrix-only tag included, it guesses: BT.601 for H.264, HEVC and VP8 under
+  720 lines of coded height, BT.709 from 720 (a portrait 720×1280 too) and for VP9 and AV1 at any size.
+  Its WebCodecs decoder takes the decoder config's colour space (a complete tag in the bitstream wins),
+  BT.709 when given none, and Mediabunny fills a missing or partial one with BT.709. So untagged SD
+  frames came out in other colours than Chrome plays (30% of the fixture's pixels off by more than 24).
+  `src/media/colour.ts` wraps the track's `getDecoderConfig` with the colour space the player would
+  guess, before any sink is made; frames, thumbnails, Grab frame and Make animation then match Chrome's
+  playback exactly. Only the matrix changes the pixels; drawing doesn't convert primaries. Firefox's
+  decoder ignores the config's colour space, and its `<video>` and decode agree anyway. Conversions
+  don't use this. Safari is unchecked.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream

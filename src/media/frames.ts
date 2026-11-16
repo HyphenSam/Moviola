@@ -1,4 +1,5 @@
 import { ALL_FORMATS, BlobSource, CanvasSink, Input, type WrappedCanvas } from 'mediabunny'
+import { decodeAsPlayed } from './colour'
 import { firstTimestamp, FORMATS } from './probe'
 
 /** A decoded frame, ready to draw. */
@@ -27,6 +28,7 @@ export const openFrames: OpenFrames = (file, box) => {
   // Pool a few canvases: each frame is drawn onto the stage's own canvas straight away.
   const ready = input.getPrimaryVideoTrack().then(async (track) => {
     if (!track || !(await track.canDecode())) return null
+    await decodeAsPlayed(track)
     const [w, h, start, first] = await Promise.all([
       track.getDisplayWidth(),
       track.getDisplayHeight(),
@@ -67,6 +69,7 @@ export async function thumbnails(file: File, times: number[], height: number): P
   try {
     const track = await input.getPrimaryVideoTrack()
     if (!track || !(await track.canDecode())) return []
+    await decodeAsPlayed(track)
     const [start, first] = await Promise.all([firstTimestamp(input), track.getFirstTimestamp()])
     const sink = new CanvasSink(track, { height: Math.round(height) })
     const images: (ImageBitmap | null)[] = []

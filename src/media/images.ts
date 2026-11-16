@@ -3,6 +3,7 @@ import { gifWriter } from '@/lib/gif'
 import { codecName } from '@/lib/info'
 import type { AnimationPlan, FramePlan } from '@/lib/plan'
 import { webpAnimationWriter } from '@/lib/webp'
+import { decodeAsPlayed } from './colour'
 import { FORMATS } from './probe'
 import { CANCELLED, JobProblem } from './run'
 
@@ -16,6 +17,7 @@ async function withVideo<T>(file: File, use: (track: InputVideoTrack, first: num
     if (!track) throw new JobProblem('This file has no video.')
     if (!(await track.canDecode()))
       throw new JobProblem(`This browser can’t decode ${codecName(await track.getCodec(), null)} video.`)
+    await decodeAsPlayed(track)
     return await use(track, await track.getFirstTimestamp())
   } finally {
     input.dispose()
