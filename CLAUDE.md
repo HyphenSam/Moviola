@@ -133,9 +133,16 @@ discarded.
 - Firefox plays an MP4 with an empty edit (`-output_ts_offset`) with its picture 0.56 s late against its
   own clock and sound, so no offset mends it. `buffered` starts there (0.573 s), which sends it to the
   frames preview.
-- Firefox seeks H.264 in MKV 2 to 4 frames short of the time asked (0.06–0.2 s), late start or not;
-  MP4 and WebM land on the frame. Its 0 for a late WebM with Opus is after the Opus pre-skip, 6.5 ms
-  past the probed start, which shows the next frame when the playhead is within that of one.
+- Firefox (158) seeks H.264 with B-frames in MKV up to 4 frames short of the time asked (x264's 3
+  B-frames at 25 fps: 0 to 0.16 s), late start or not. It acts as if each frame lasts until the next
+  block in the file, which is decode order, and shows the first frame whose end passes the time: with
+  frames stored 0 4 2 1 3 8…, frame 3 "ends" at 8, so frames 4 to 7 show frame 3 and no seek reaches
+  them. Without B-frames (`-bf 0`, all-intra), VP9 in MKV, and MP4 land on the frame, as Chrome does on
+  all of them. `currentTime` and `requestVideoFrameCallback`'s `mediaTime` both echo the time asked, so
+  the player can't see the miss; the playhead, Trim and Grab frame are right and only Firefox's picture
+  is early. Without cues it's worse: seeks land on a keyframe up to 2 s off. Its 0 for a late WebM with
+  Opus is after the Opus pre-skip, 6.5 ms past the probed start, which shows the next frame when the
+  playhead is within that of one.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream
