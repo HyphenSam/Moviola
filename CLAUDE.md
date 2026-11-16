@@ -121,7 +121,21 @@ discarded.
 - Timestamps don't always start at 0. MPEG-TS starts near 1.4 s, and MP4 AAC priming goes slightly
   negative. `MediaInfo.start` is the playhead's 0 (first timestamp, clamped at 0); add it when
   asking Mediabunny for a time. The first video frame can be a little later than `start`.
-- Chrome and Firefox both play MKV natively now; MPEG-TS is what reaches the fallback preview.
+- Chrome and Firefox both play MKV natively now; MPEG-TS is what reaches the fallback preview, with
+  Firefox's late-starting MP4 (below).
+- A media element's clock for a file starting 10 s in: Chrome counts the file's timestamps (the first
+  frame at 10 s), Firefox counts from the first one, as the playhead does. Chrome's `currentTime` is
+  still 0 at `loadedmetadata` and moves at `loadeddata`, so `NativeMedia` takes the position at
+  `loadeddata` as the playhead's 0 and holds seeks until then. `seekable` starts at 0 in both.
+- Element lengths of late files are wrong: Chrome's MP4 one (an empty edit) starts at 0.34 s and grows
+  as it plays, and seeks clamp to it; Firefox's MKV and WebM one counts from 0 (14 s for 4 s), so it
+  plays on to it. The player uses the probed length, stops there, and logs a mismatch once.
+- Firefox plays an MP4 with an empty edit (`-output_ts_offset`) with its picture 0.56 s late against its
+  own clock and sound, so no offset mends it. `buffered` starts there (0.573 s), which sends it to the
+  frames preview.
+- Firefox seeks H.264 in MKV 2 to 4 frames short of the time asked (0.06–0.2 s), late start or not;
+  MP4 and WebM land on the frame. Its 0 for a late WebM with Opus is after the Opus pre-skip, 6.5 ms
+  past the probed start, which shows the next frame when the playhead is within that of one.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream

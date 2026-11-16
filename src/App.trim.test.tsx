@@ -16,6 +16,9 @@ async function openOnTrim(info: MediaInfo = fakeInfo(), capabilities?: WorkerCap
   const view = render(<App webCodecs client={client} frames={fakeFrames()} />)
   await user.upload(screen.getByLabelText('Choose file'), new File([new Uint8Array(16)], info.name))
   await screen.findByRole('region', { name: 'Open file' })
+  // The first frame is in, so the player knows the element's clock (Player.tsx).
+  const video = view.container.querySelector('video')
+  if (video) fireEvent(video, new Event('loadeddata'))
   await user.click(within(tools()).getByRole('radio', { name: 'Trim' }))
   return { client, user, view }
 }

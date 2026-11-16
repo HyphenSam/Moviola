@@ -78,6 +78,17 @@ describe('probe', () => {
     expect(info.tracks.map((t) => t.codec)).toEqual(['avc', 'aac'])
   })
 
+  it.each([
+    // The AAC priming moves the audio 21–22 ms ahead of the picture's 10 s; Opus has no priming here.
+    ['h264-aac-late.mp4', 9.978, 4.022],
+    ['h264-aac-late.mkv', 9.979, 4.021],
+    ['vp9-opus-late.webm', 10, 4.007],
+  ])('counts %s’s length from its first timestamp, about 10 s in', async (name, start, duration) => {
+    const info = await probe(fixture(name))
+    expect(info.start).toBeCloseTo(start, 3)
+    expect(info.duration).toBeCloseTo(duration, 3)
+  })
+
   it('starts other files at zero', async () => {
     expect((await probe(fixture('h264-aac.mp4'))).start).toBe(0)
   })

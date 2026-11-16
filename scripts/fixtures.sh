@@ -55,6 +55,12 @@ ff "${video[@]}" "${x264[@]}" h264-only.mp4
 # MPEG-TS starts its timestamps near 1.4 s, not 0: the player and planners must count from there.
 ff -i h264-aac.mp4 -c copy h264-aac.ts
 
+# Natively playable files whose first timestamp is 10 s, as cut from a longer recording: the native
+# player's clock must still count from the playhead's 0.
+ff -i h264-aac.mp4 -c copy -output_ts_offset 10 h264-aac-late.mp4
+ff -i h264-aac.mp4 -c copy -output_ts_offset 10 h264-aac-late.mkv
+ff -i vp9-opus.webm -c copy -output_ts_offset 10 vp9-opus-late.webm
+
 # Stored 320×180 with 90° display rotation, so it shows as 180×320.
 ff -display_rotation 90 -i h264-only.mp4 -c copy rotated.mp4
 

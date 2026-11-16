@@ -94,8 +94,13 @@ a normal machine.
 ### Player
 - When `video.canPlayType` accepts the file's MIME type and codecs (or it simply starts playing),
   use a `<video>` element on an object URL of the `File`. Native playback gives sound and smooth
-  seeking.
-- Otherwise (MKV in Safari, HEVC without hardware support, and so on), show decoded frames with
+  seeking. The element's clock isn't always the playhead's (Chrome counts a late-starting file from
+  its timestamps, Firefox from its first one), so its position once the first frame is in is taken
+  as the playhead's 0, and times are translated both ways. Its length is the probed one: reported
+  times stay within 0 to `duration`, playing stops there, and an element that disagrees by more
+  than a frame is logged once.
+- Otherwise (MKV in Safari, HEVC without hardware support, a picture that starts well after the
+  element's 0 as in Firefox's late-starting MP4, and so on), show decoded frames with
   Mediabunny's `CanvasSink` at the playhead, no sound, and the chip "Preview without sound". Playing
   in this mode advances frames at real time as fast as decoding allows. If the video track can't be
   decoded at all, the stage shows the thumbnail strip's placeholder and "This browser can't show
@@ -536,6 +541,7 @@ or swapped channel shows. At least:
 | `h264-only.mp4` | H.264, no audio | Extract audio dimmed |
 | `rotated.mp4` | H.264 with 90° rotation metadata | display size, frame grab |
 | `h264-aac.ts` | `h264-aac.mp4` in MPEG-TS, starting near 1.4 s | non-zero start, the fallback preview |
+| `h264-aac-late.mp4`, `h264-aac-late.mkv`, `vp9-opus-late.webm` | `h264-aac.mp4` and `vp9-opus.webm` starting 10 s in | the native player's clock |
 | `aac.m4a` | mono AAC audio only | audio-only behaviour |
 | `pcm-51.wav`, `pcm-71.wav` | 5.1 and 7.1 PCM s16le, 1 s at 16 kHz | surround conversions end to end in Node, the stereo mixdown |
 | `flac.flac` | FLAC audio only | a bare FLAC file's length (Mediabunny misreads it if probed carelessly) |

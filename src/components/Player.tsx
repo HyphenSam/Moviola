@@ -63,11 +63,17 @@ export function Player({
           {!video ? (
             <AudioPanel info={info}>
               {mode === 'native' ? (
-                <NativeMedia kind="audio" file={file} player={player} onUnsupported={unsupported} />
+                <NativeMedia kind="audio" file={file} player={player} frameRate={null} onUnsupported={unsupported} />
               ) : null}
             </AudioPanel>
           ) : mode === 'native' ? (
-            <NativeMedia kind="video" file={file} player={player} onUnsupported={unsupported} />
+            <NativeMedia
+              kind="video"
+              file={file}
+              player={player}
+              frameRate={video.frameRate}
+              onUnsupported={unsupported}
+            />
           ) : mode === 'frames' ? (
             <FrameView file={file} frames={frames} player={player} />
           ) : (
@@ -87,23 +93,40 @@ export function Player({
   )
 }
 
-/** A `<video>` or `<audio>` on an object URL of the file: the browser reads it lazily, never whole. */
+// How far past the clock's 0 the element's picture may start before it's taken to be misplaced: AAC
+// priming puts the sound up to about 50 ms ahead of the picture, and Firefox's 0.56 s is well beyond.
+const LATE_PICTURE = 0.1
+
+/** The element's time `t` on the playhead's clock, within the file. */
+const playhead = (t: number, offset: number, duration: number) => Math.min(Math.max(0, t - offset), duration)
+
+/** A `<video>` or `<audio>` on an object URL of the file: the browser reads it lazily, never whole.
+ *
+ * The element's clock isn't always the playhead's. For a file whose first timestamp is 10 s in,
+ * Chrome counts from the timestamps (the first frame is at 10 s) and Firefox from the first one, as
+ * the playhead does. Where the clock stands once the first frame is in is the playhead's 0, so times
+ * are translated by that both ways; until then, a seek waits. The length is the probed one: the
+ * element's can be wrong (Chrome's MP4 one is provisional, Firefox counts MKV and WebM from 0). */
 function NativeMedia({
   kind,
   file,
   player,
+  frameRate,
   onUnsupported,
 }: {
   kind: 'video' | 'audio'
   file: File
   player: PlayerControls
+  frameRate: number | null
   onUnsupported: () => void
 }) {
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null)
   const [url, setUrl] = useState<string>()
-  const { report, backend, playing, muted, volume } = player
+  const { report, backend, playing, muted, volume, duration, now } = player
   const failed = useRef(onUnsupported)
   failed.current = onUnsupported
+  // The element's time at the playhead's 0, once its first frame is in.
+  const offset = useRef<number | null>(null)
 
   useEffect(() => {
     const u = URL.createObjectURL(file)
@@ -113,23 +136,53 @@ function NativeMedia({
 
   useEffect(() => {
     const el = ref.current!
-    el.currentTime = player.now.current.time
     backend.current = {
-      play: () => void el.play().catch(() => {}),
+      play: () => {
+        // Where the element plays on past the end (see `time`), start over as at a real end.
+        if (offset.current !== null && el.currentTime - offset.current >= duration) el.currentTime = offset.current
+        void el.play().catch(() => {})
+      },
       pause: () => el.pause(),
-      seek: (t) => (el.currentTime = t),
+      seek: (t) => {
+        if (offset.current !== null) el.currentTime = t + offset.current
+      },
     }
-    const time = () => report.time(el.currentTime)
+    const time = () => {
+      if (offset.current === null) return
+      report.time(playhead(el.currentTime, offset.current, duration))
+      if (el.currentTime - offset.current >= duration && !el.paused) el.pause()
+    }
     const on = { play: () => report.playing(true), pause: () => report.playing(false) }
     // Some browsers play a file's sound but can't decode its picture; that's no preview either.
-    const loaded = () => kind === 'video' && el.videoWidth === 0 && failed.current()
+    const metadata = () => kind === 'video' && el.videoWidth === 0 && failed.current()
+    let warned = false
+    const length = () => {
+      const says = el.duration - (offset.current ?? 0)
+      if (warned || offset.current === null || !Number.isFinite(says)) return
+      if (Math.abs(says - duration) <= 1 / (frameRate ?? 30)) return
+      warned = true
+      console.warn(
+        `The browser says ${file.name} is ${says.toFixed(3)} s long; it is ${duration.toFixed(3)} s, so the player stops there.`,
+      )
+    }
+    const loaded = () => {
+      if (offset.current !== null) return
+      offset.current = el.currentTime
+      const buffered = el.buffered.length ? el.buffered.start(0) - offset.current : 0
+      if (kind === 'video' && buffered > LATE_PICTURE) return failed.current()
+      length()
+      // A seek asked for while loading, or the playhead where an earlier element left it.
+      if (now.current.time > 0) el.currentTime = now.current.time + offset.current
+    }
     const error = () => failed.current()
     el.addEventListener('play', on.play)
     el.addEventListener('pause', on.pause)
     el.addEventListener('ended', on.pause)
     el.addEventListener('timeupdate', time)
     el.addEventListener('seeked', time)
-    el.addEventListener('loadedmetadata', loaded)
+    el.addEventListener('loadedmetadata', metadata)
+    el.addEventListener('loadeddata', loaded)
+    el.addEventListener('durationchange', length)
     el.addEventListener('error', error)
     return () => {
       backend.current = null
@@ -138,10 +191,12 @@ function NativeMedia({
       el.removeEventListener('ended', on.pause)
       el.removeEventListener('timeupdate', time)
       el.removeEventListener('seeked', time)
-      el.removeEventListener('loadedmetadata', loaded)
+      el.removeEventListener('loadedmetadata', metadata)
+      el.removeEventListener('loadeddata', loaded)
+      el.removeEventListener('durationchange', length)
       el.removeEventListener('error', error)
     }
-  }, [backend, report, kind, player.now])
+  }, [backend, report, kind, now, duration, frameRate, file.name])
 
   useEffect(() => {
     ref.current!.muted = muted
@@ -152,11 +207,12 @@ function NativeMedia({
   useEffect(() => {
     if (!playing) return
     let frame = requestAnimationFrame(function tick() {
-      if (ref.current) report.time(ref.current.currentTime)
+      if (ref.current && offset.current !== null)
+        report.time(playhead(ref.current.currentTime, offset.current, duration))
       frame = requestAnimationFrame(tick)
     })
     return () => cancelAnimationFrame(frame)
-  }, [playing, report])
+  }, [playing, report, duration])
 
   if (kind === 'audio') return <audio ref={ref} src={url} preload="auto" />
   // No controls of its own: the transport drives it. Firefox would still make it an unnamed tab stop.
