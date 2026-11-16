@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Capabilities } from '@/lib/capabilities'
 import type { ContainerCodecs } from '@/lib/containers'
-import type { MediaInfo } from '@/lib/info'
+import type { AudioTrack, MediaInfo } from '@/lib/info'
 import { ALL_CAPABLE, fakeAudioInfo, fakeAudioTrack, fakeInfo, fakeVideoTrack } from '@/lib/testing'
 import { CONTAINER_CODECS } from '@/media/formats'
 import {
@@ -245,6 +245,83 @@ describe('planExtractAudio, WAV', () => {
       caption: 'PCM 32-bit float is rounded to 24 bits.',
       badge: 'Decodes to WAV',
     })
+  })
+})
+
+// A FLAC whose decoder description is missing or short, so probe can't read its depth.
+const flacUnknown = fakeAudioInfo({
+  name: 'a.flac',
+  tracks: [fakeAudioTrack({ id: 1, codec: 'flac', codecString: 'flac', bitDepth: null })],
+})
+
+describe('planExtractAudio, a lossless source whose depth can’t be read', () => {
+  it('doesn’t call 16-bit WAV lossless, and says how to be safe', () => {
+    expect(plan(flacUnknown, { format: 'wav' })).toMatchObject({
+      plan: { lossless: false, audio: { codec: 'pcm-s16' } },
+      caption: 'Moviola can’t read this FLAC’s bit depth, so it may be rounded to 16 bits. Choose 24-bit to be safe.',
+      badge: 'Decodes to WAV',
+    })
+  })
+
+  it('doesn’t call 24-bit WAV lossless either', () => {
+    expect(plan(flacUnknown, { format: 'wav', wavBits: 24 })).toMatchObject({
+      plan: { lossless: false, audio: { codec: 'pcm-s24' } },
+      caption: 'Moviola can’t read this FLAC’s bit depth, so it’s written at 24 bits to be safe.',
+      badge: 'Decodes to WAV',
+    })
+  })
+
+  it('writes FLAC at 24 bits, the deepest Moviola writes', () => {
+    expect(plan(flacUnknown, { format: 'flac' })).toMatchObject({
+      plan: { lossless: false, audio: { codec: 'flac', sampleFormat: 's32' } },
+      caption: 'Moviola can’t read this FLAC’s bit depth, so it’s written at 24 bits to be safe.',
+      badge: 'Decodes to FLAC',
+    })
+  })
+})
+
+// 5.1 at 48 kHz is 864,000 bytes a second at 24 bits and 576,000 at 16, so RIFF's 4 GiB (2^32 bytes,
+// less the 44-byte header) holds 4971 and 7456 whole seconds.
+const film = (duration: number, track: Partial<AudioTrack> = {}) =>
+  fakeInfo({
+    name: 'film.mkv',
+    container: 'mkv',
+    duration,
+    tracks: [fakeVideoTrack(), fakeAudioTrack({ channels: 6, ...track })],
+  })
+
+describe('planExtractAudio, a WAV past 4 GiB', () => {
+  it('writes a WAV just under the limit', () => {
+    expect(plan(film(4971), { format: 'wav', wavBits: 24 }).plan).toBeDefined()
+    expect(plan(film(7456), { format: 'wav', wavBits: 16 }).plan).toBeDefined()
+  })
+
+  it('refuses one just over it, pointing to FLAC', () => {
+    expect(plan(film(4972), { format: 'wav', wavBits: 24 })).toEqual({
+      problems: ['This would be a 4.3 GB WAV, and WAV files stop at 4 GB. Choose FLAC, which is lossless and smaller.'],
+    })
+    expect(plan(film(7457), { format: 'wav', wavBits: 16 }).problems).toHaveLength(1)
+  })
+
+  it('gives the size it would have been', () => {
+    expect(plan(film(2 * 60 * 60), { format: 'wav', wavBits: 24 }).problems).toEqual([
+      'This would be a 6.2 GB WAV, and WAV files stop at 4 GB. Choose FLAC, which is lossless and smaller.',
+    ])
+  })
+
+  it('refuses an Original copy of PCM into a WAV that big as well', () => {
+    const pcm24 = { codec: 'pcm-s24', codecString: 'pcm-s24', bitDepth: 24 } as const
+    expect(plan(film(4971, pcm24)).plan?.container).toBe('wav')
+    expect(plan(film(4972, pcm24)).problems).toEqual([
+      'This would be a 4.3 GB WAV, and WAV files stop at 4 GB. Choose FLAC, which is lossless and smaller.',
+    ])
+  })
+
+  it('doesn’t call FLAC lossless for float PCM, which it rounds', () => {
+    const f32 = { codec: 'pcm-f32', codecString: 'pcm-f32', bitDepth: 32 } as const
+    expect(plan(film(3 * 60 * 60, f32)).problems).toEqual([
+      'This would be a 12.4 GB WAV, and WAV files stop at 4 GB. Choose FLAC, which is smaller.',
+    ])
   })
 })
 

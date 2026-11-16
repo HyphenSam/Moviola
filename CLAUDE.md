@@ -77,7 +77,7 @@ is lossless or re-encodes.
   the lossless audio container), `plans/` (one module per tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
-  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
+  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
   `format-bytes.ts`, `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
   checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list).
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what

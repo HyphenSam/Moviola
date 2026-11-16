@@ -1,7 +1,8 @@
 import type { Capabilities } from '../capabilities'
 import { destination, losslessAudioContainer, type ContainerCodecs, type Destination } from '../containers'
-import { audioSummary, codecName, languageName, PCM_BITS, type AudioTrack, type MediaInfo } from '../info'
+import { audioSummary, codecName, formatSize, languageName, PCM_BITS, type AudioTrack, type MediaInfo } from '../info'
 import { outputName } from '../names'
+import { WAV_MAX_BYTES, wavBytes } from '../wav'
 import type { Plan, Planned } from '../plan'
 
 export type AudioFormat = 'original' | 'mp3' | 'wav' | 'flac'
@@ -101,10 +102,26 @@ export function planExtractAudio(
     ...(audio && { audio }),
   })
 
+  const pcm = PCM_BITS[track.codec]
+  const float = !!pcm?.float
+  // RIFF stops at 4 GiB, and Mediabunny's writer only finds out when it gets there.
+  const tooBigForWav = (bits: number) => {
+    const bytes = wavBytes(info.duration, track.sampleRate, track.channels, bits)
+    if (bytes < WAV_MAX_BYTES) return null
+    const flac = float ? 'smaller' : 'lossless and smaller'
+    return {
+      problems: [
+        `This would be a ${formatSize(bytes)} WAV, and WAV files stop at 4 GB. Choose FLAC, which is ${flac}.`,
+      ],
+    }
+  }
+
   const { format } = settings
   if (format === 'original') {
     const destination = losslessAudioContainer(track.codec, codecs)
     if (!destination) return { problems: [`Moviola can’t write ${codec} audio into any file type it knows.`] }
+    const tooBig = destination.container === 'wav' && pcm && tooBigForWav(pcm.bits)
+    if (tooBig) return tooBig
     return {
       plan: planFor(destination, true),
       caption: `${codec}, copied as is into .${destination.extension}. No quality is lost.`,
@@ -137,14 +154,18 @@ export function planExtractAudio(
 
   // WAV and FLAC store every sample they're given at their depth. That's lossless only from a
   // lossless source (PCM or FLAC) whose samples fit: integers no deeper than the target. Floats never
-  // fit an integer depth exactly.
-  const pcm = PCM_BITS[track.codec]
+  // fit an integer depth exactly. A lossless source whose depth probe couldn't read (a FLAC without
+  // its STREAMINFO) may be deeper than 16 bits, so it's never called lossless and FLAC takes 24.
   const lossless = track.codec === 'flac' || !!pcm
-  const float = !!pcm?.float
-  const sourceBits = track.bitDepth ?? 16
+  const unknownDepth = lossless && !float && track.bitDepth === null
+  const sourceBits = track.bitDepth ?? 0
   // WAV's depth is the user's; FLAC's follows the source, so 16-bit audio isn't padded out to 24 (the
   // encoder takes its depth from the decoded samples, and Firefox decodes to float).
-  const bits = format === 'wav' ? settings.wavBits : lossless && (float || sourceBits > 16) ? 24 : 16
+  const bits = format === 'wav' ? settings.wavBits : lossless && (float || unknownDepth || sourceBits > 16) ? 24 : 16
+  if (format === 'wav') {
+    const tooBig = tooBigForWav(bits)
+    if (tooBig) return tooBig
+  }
   const name = format === 'wav' ? 'WAV' : 'FLAC'
   const audio: Plan['audio'] =
     format === 'wav'
@@ -156,6 +177,14 @@ export function planExtractAudio(
     return {
       plan: planFor(format === 'wav' ? WAV : FLAC, false, audio),
       caption: `${name} is ${format === 'wav' ? 'uncompressed' : 'lossless'}, but it can’t restore what the original codec already lost.`,
+      badge,
+    }
+  }
+  if (unknownDepth) {
+    const written = bits < 24 ? `it may be rounded to ${bits} bits. Choose 24-bit` : `it’s written at ${bits} bits`
+    return {
+      plan: planFor(format === 'wav' ? WAV : FLAC, false, audio),
+      caption: `Moviola can’t read this ${codec}’s bit depth, so ${written} to be safe.`,
       badge,
     }
   }

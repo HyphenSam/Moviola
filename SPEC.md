@@ -182,6 +182,18 @@ Gets the audio out of a video, losslessly by default.
   original codec already lost." for a lossy source, or, for a lossless one that doesn't fit, "24-bit
   FLAC is rounded to 16 bits. Choose 24-bit to keep every sample." (float PCM: "PCM 32-bit float is
   rounded to 24 bits.").
+- **A lossless source whose depth can't be read** (a FLAC whose decoder description is missing or
+  shorter than STREAMINFO) may be deeper than 16 bits, so it's never called lossless. WAV keeps the
+  chosen depth; FLAC is written at 24 bits. Badge "Decodes to WAV" / "Decodes to FLAC", caption
+  "Moviola can't read this FLAC's bit depth, so it may be rounded to 16 bits. Choose 24-bit to be
+  safe." at 16 bits, or "…so it's written at 24 bits to be safe." at 24.
+- **WAV stops at 4 GiB** (RIFF's sizes are 32-bit; Mediabunny's writer throws there). The size is
+  known before the job (`wavBytes` in `wav.ts`: duration × sample rate × channels × bytes a sample,
+  plus the 44-byte header), so a WAV that would reach 2^32 bytes is refused, as WAV and as an
+  Original copy of PCM into `.wav`: "This would be a 5.2 GB WAV, and WAV files stop at 4 GB. Choose
+  FLAC, which is lossless and smaller." (float PCM: "…Choose FLAC, which is smaller.", since FLAC
+  rounds it to 24 bits). 5.1 at 48 kHz reaches it after 83 minutes at 24 bits, 124 at 16. RF64
+  (`large: true`) isn't used: not every player opens it.
 - **FLAC**: compression level isn't exposed. The depth follows the source: 24 bits for lossless
   sources deeper than 16 bits (or float), 16 otherwise, lossy sources included. Same badge rule as WAV
   ("Decodes to FLAC"): "PCM 16-bit, compressed into 16-bit FLAC. No quality is lost.", "FLAC is
