@@ -1,7 +1,7 @@
 import type { Capabilities, VideoEncodeCodec } from '../capabilities'
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
 import { codecName, hasAudio, videoTrack, type MediaInfo, type Track } from '../info'
-import { extensionOf, outputName } from '../names'
+import { extensionOf, outputName, usableExtension } from '../names'
 import type { Plan, Planned } from '../plan'
 import { formatTimecode, frameDuration } from '../timecode'
 
@@ -77,12 +77,13 @@ export function planTrim(
   if (!container) return { problems: ['Moviola can’t write these tracks into any file type it knows.'] }
 
   const kind = video ? 'video' : 'audio'
-  const { extension, mimeType } = destination(container, kind)
+  const { extension, mimeType } = destination(container, kind, known.find((t) => t.kind === 'audio')?.codec)
+  // The source's own extension as written, unless the save dialog would refuse it.
   const own = container === info.container ? extensionOf(info.name) : null
   const plan: Plan = {
     kind,
     container,
-    name: outputName(info.name, ' (trimmed)', own ?? extension),
+    name: outputName(info.name, ' (trimmed)', usableExtension(own) ? own : extension),
     mimeType,
     lossless: !precise,
     keep: known.map((t) => t.id),

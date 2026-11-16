@@ -7,6 +7,31 @@ import { grabFrame, makeAnimation } from '@/media/images'
 import { keyframeAt, probe } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
+export const SAME_FILE = 'That’s the file you have open. Save under another name, so the original is kept.'
+export const UNREADABLE =
+  'Moviola can’t read this file any more. It may have been moved, renamed or changed; open it again.'
+
+/** What a browser throws when a `File` it was given earlier has since been moved, deleted or changed
+ * on disk, or its drive has gone. */
+const isReadError = (error: unknown) =>
+  error instanceof DOMException && (error.name === 'NotReadableError' || error.name === 'NotFoundError')
+
+/** Whether a request failed because its file can't be read any more. Mediabunny reads through a
+ * stream, and Chrome's stream says only "TypeError: network error", so the file itself is asked. */
+async function cantRead(error: unknown, file: File | undefined) {
+  if (isReadError(error)) return true
+  if (!file || error instanceof JobProblem) return false
+  return file.slice(0, 1).arrayBuffer().then(() => false, isReadError)
+}
+
+/** Whether the file chosen in the save dialog is the source itself. Writing it would replace the
+ * original with the result, and leave the page holding a `File` it can no longer read. A file the
+ * dialog has just made is empty, so it never matches. */
+async function isSource(handle: FileSystemFileHandle, source: File) {
+  const chosen = await handle.getFile()
+  return chosen.name === source.name && chosen.size === source.size && chosen.lastModified === source.lastModified
+}
+
 /** Jobs running now, by request id, so a cancel can reach them. */
 const running = new Map<number, AbortController>()
 
@@ -57,8 +82,9 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
       }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    const worded = request.type !== 'run' || error instanceof JobProblem
+    const unreadable = await cantRead(error, 'file' in request ? request.file : undefined)
+    const message = unreadable ? UNREADABLE : error instanceof Error ? error.message : String(error)
+    const worded = request.type !== 'run' || error instanceof JobProblem || unreadable
     post({ type: 'failed', id: request.id, message: worded ? message : `Something went wrong: ${message}` })
   }
 }
@@ -83,6 +109,8 @@ async function runTo(
     return { size: result.size, blob: new Blob([result.buffer!], { type: plan.mimeType }) }
   }
 
+  // Checked before the stream is opened, and outside the clean-up below: nothing here is ours to remove.
+  if (await isSource(target.handle, file)) throw new JobProblem(SAME_FILE)
   const writable = await target.handle.createWritable()
   try {
     const result = await run(file, plan, writable, { signal, onProgress: progress })

@@ -53,8 +53,10 @@ const FILES: Record<OutputContainer, [video: Omit<Destination, 'container'>, aud
     adts: [{ extension: 'aac', mimeType: 'audio/aac' }],
   }
 
-/** Where a result of this kind goes in `container`, with the container's usual extension. */
-export function destination(container: OutputContainer, kind: 'video' | 'audio'): Destination {
+/** Where a result of this kind goes in `container`, with the container's usual extension. Ogg's
+ * depends on what it holds, so pass the audio's codec where it's known: Opus is `.opus`. */
+export function destination(container: OutputContainer, kind: 'video' | 'audio', codec?: string | null): Destination {
+  if (container === 'ogg' && codec === 'opus') return OPUS
   const [video, audio] = FILES[container]
   return { container, ...(kind === 'audio' && audio ? audio : video) }
 }

@@ -5,9 +5,26 @@ import type { Plan } from '@/lib/plan'
 import type { Reply, Request } from '@/lib/protocol'
 import { CANT_OPEN } from '@/media/probe'
 import { CANCELLED } from '@/media/run'
-import { handle } from './handle'
+import { handle, SAME_FILE, UNREADABLE } from './handle'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
+
+/** A file that was moved, deleted or changed after it was opened: it still has its name and size,
+ * and every read fails as the browser's does. */
+function unreadable(name: string, error = 'NotReadableError') {
+  const fail = () => new DOMException('The requested file could not be read.', error)
+  const spoil = <B extends Blob>(blob: B): B => {
+    const slice = blob.slice.bind(blob)
+    blob.slice = (...args) => spoil(slice(...args))
+    blob.arrayBuffer = () => Promise.reject(fail())
+    blob.bytes = () => Promise.reject(fail())
+    blob.text = () => Promise.reject(fail())
+    // Chrome's streams don't say why: a read through one fails with this instead (Chrome 156).
+    blob.stream = () => new ReadableStream({ pull: (controller) => controller.error(new TypeError('network error')) })
+    return blob
+  }
+  return spoil(fixture(name))
+}
 
 async function run(file: File) {
   const replies: Reply[] = []
@@ -110,22 +127,30 @@ function worker() {
   return { replies, send: (request: Request) => handle(request, (reply) => replies.push(reply)) }
 }
 
-/** A file the user chose in the save dialog: an empty file until the stream is closed. */
-function fakeHandle() {
-  const state = { closed: false, aborted: false, removed: false, bytes: 0 }
+/** A file the user chose in the save dialog: an empty file until the stream is closed, or `existing`,
+ * a file that was already there and that the user chose to replace. */
+function fakeHandle(existing?: File) {
+  const state = { opened: false, closed: false, aborted: false, removed: false, bytes: 0 }
+  const name = existing?.name ?? 'chosen.m4a'
   const handle = {
-    name: 'chosen.m4a',
-    createWritable: async () =>
-      new WritableStream<{ data: Uint8Array }>({
+    name,
+    createWritable: async () => {
+      state.opened = true
+      return new WritableStream<{ data: Uint8Array }>({
         write: ({ data }) => void (state.bytes += data.byteLength),
         close: () => void (state.closed = true),
         abort: () => void (state.aborted = true),
-      }),
-    getFile: async () => new File(state.closed ? [new Uint8Array(state.bytes)] : [], 'chosen.m4a'),
+      })
+    },
+    getFile: async () =>
+      state.closed ? new File([new Uint8Array(state.bytes)], name) : (existing ?? new File([], name)),
     remove: async () => void (state.removed = true),
   }
   return { handle: handle as unknown as FileSystemFileHandle, state }
 }
+
+/** The same file on disk, read again: another `File` object with the same name, size and date. */
+const reread = (file: File) => new File([file], file.name, { lastModified: file.lastModified })
 
 describe('worker handle, run', () => {
   it('builds the output in memory and answers with a Blob of the plan’s type, after progress', async () => {
@@ -163,6 +188,54 @@ describe('worker handle, run', () => {
     await running
     expect(replies.at(-1)).toEqual({ type: 'failed', id: 5, message: CANCELLED })
     expect(state).toMatchObject({ closed: false, aborted: true, removed: true })
+  })
+
+  it('refuses to save over the file that’s open, before anything is written or removed', async () => {
+    const { replies, send } = worker()
+    const file = fixture('h264-aac.mp4')
+    const { handle, state } = fakeHandle(reread(file))
+    await send({ type: 'run', id: 8, file, plan: m4a, target: { type: 'file', handle } })
+    expect(replies.at(-1)).toEqual({ type: 'failed', id: 8, message: SAME_FILE })
+    expect(state).toMatchObject({ opened: false, removed: false })
+  })
+
+  it.each([
+    ['another name', (f: File) => new File([f], 'other.mp4', { lastModified: f.lastModified })],
+    ['another size', (f: File) => new File([f, 'more'], f.name, { lastModified: f.lastModified })],
+    ['another date', (f: File) => new File([f], f.name, { lastModified: f.lastModified - 1000 })],
+  ])('replaces a file the user chose that isn’t the one open (%s)', async (_, other) => {
+    const { replies, send } = worker()
+    const file = fixture('h264-aac.mp4')
+    const { handle, state } = fakeHandle(other(file))
+    await send({ type: 'run', id: 9, file, plan: m4a, target: { type: 'file', handle } })
+    expect(replies.at(-1)).toEqual({ type: 'done', id: 9, value: { size: state.bytes, blob: null } })
+    expect(state).toMatchObject({ closed: true, removed: false })
+  })
+
+  it.each(['NotReadableError', 'NotFoundError'])(
+    'says the source can’t be read any more when a job’s reads fail with %s',
+    async (error) => {
+      const { replies, send } = worker()
+      const { handle, state } = fakeHandle()
+      const file = unreadable('h264-aac.mp4', error)
+      await send({ type: 'run', id: 10, file, plan: m4a, target: { type: 'memory' } })
+      await send({ type: 'run', id: 11, file, plan: m4a, target: { type: 'file', handle } })
+      expect(replies.filter((r) => r.type === 'failed')).toEqual([
+        { type: 'failed', id: 10, message: UNREADABLE },
+        { type: 'failed', id: 11, message: UNREADABLE },
+      ])
+      // The empty file the save dialog made goes, as for any job that wrote nothing.
+      expect(state).toMatchObject({ closed: false, removed: true })
+    },
+  )
+
+  it('says the same for a probe, a keyframe and thumbnails of a file that can’t be read any more', async () => {
+    const { replies, send } = worker()
+    const file = unreadable('h264-aac.mp4')
+    await send({ type: 'probe', id: 12, file })
+    await send({ type: 'keyframe', id: 13, file, trackId: 1, time: 3 })
+    await send({ type: 'thumbnails', id: 14, file, times: [0.5], height: 48 })
+    expect(replies).toEqual([12, 13, 14].map((id) => ({ type: 'failed', id, message: UNREADABLE })))
   })
 
   it('words an unexpected failure as one, keeping Mediabunny’s message', async () => {

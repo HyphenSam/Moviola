@@ -9,6 +9,12 @@ export function stem(name: string): string {
 /** The source's last extension, as written, or null when it has none. */
 export const extensionOf = (name: string) => (stem(name) === name ? null : name.slice(stem(name).length + 1))
 
+/** Whether a source's extension can be reused as written for the output. The save dialog throws a
+ * TypeError for an accept extension that is empty, longer than 16 characters with its dot, or holds
+ * anything but letters, digits and `+` (`clip.` and `My Video.final cut` both reach here). */
+export const usableExtension = (extension: string | null): extension is string =>
+  extension !== null && /^[a-z0-9+]{1,15}$/i.test(extension)
+
 // Windows refuses these in file names; times use `-` for `:` instead.
 const sanitise = (part: string) => part.replaceAll(':', '-').replace(/[<>"/\\|?*]/g, '')
 

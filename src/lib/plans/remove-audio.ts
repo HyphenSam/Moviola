@@ -1,6 +1,6 @@
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
 import { hasAudio, videoTrack, type MediaInfo, type Track } from '../info'
-import { extensionOf, outputName } from '../names'
+import { extensionOf, outputName, usableExtension } from '../names'
 import type { Plan, Planned } from '../plan'
 
 /** Remove audio (SPEC.md 6.5): everything but the audio copied as is, apart from the audio tracks the
@@ -30,11 +30,12 @@ export function planRemoveAudio(info: MediaInfo, keepAudio: readonly number[], c
 
   const { extension, mimeType } = destination(container, 'video')
   const edited = kept.some((t) => t.kind === 'audio')
+  // The source's own extension as written, unless the save dialog would refuse it.
   const own = container === info.container ? extensionOf(info.name) : null
   const plan: Plan = {
     kind: 'video',
     container,
-    name: outputName(info.name, edited ? ' (edited)' : ' (no audio)', own ?? extension),
+    name: outputName(info.name, edited ? ' (edited)' : ' (no audio)', usableExtension(own) ? own : extension),
     mimeType,
     lossless: true,
     keep: kept.map((t) => t.id),

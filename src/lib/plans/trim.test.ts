@@ -44,6 +44,26 @@ describe('planTrim, Fast', () => {
     expect(plan(fakeInfo({ name: 'match.m2ts', container: 'mpegts' })).plan?.name).toBe('match (trimmed).m2ts')
   })
 
+  it('uses the container’s usual extension when the source’s own is one the save dialog refuses', () => {
+    expect(plan(fakeInfo({ name: 'clip.' })).plan?.name).toBe('clip (trimmed).mp4')
+    expect(plan(fakeInfo({ name: 'My Video.final cut' })).plan?.name).toBe('My Video (trimmed).mp4')
+    // 16 letters: one more than the dialog takes.
+    expect(plan(fakeInfo({ name: 'match.transportstreams', container: 'mpegts' })).plan?.name).toBe(
+      'match (trimmed).ts',
+    )
+    expect(plan(fakeAudioInfo({ name: 'song.' })).plan?.name).toBe('song (trimmed).m4a')
+  })
+
+  it('names Ogg holding Opus .opus and Ogg holding Vorbis .ogg when the source’s extension can’t be used', () => {
+    const ogg = (name: string, codec: 'opus' | 'vorbis') =>
+      plan(fakeAudioInfo({ name, container: 'ogg', tracks: [fakeAudioTrack({ codec })] })).plan
+    expect(ogg('voice note', 'opus')).toMatchObject({ container: 'ogg', name: 'voice note (trimmed).opus' })
+    expect(ogg('voice.', 'opus')?.name).toBe('voice (trimmed).opus')
+    expect(ogg('voice note', 'vorbis')?.name).toBe('voice note (trimmed).ogg')
+    // An extension that can be used is kept as written, whatever the codec.
+    expect(ogg('voice.ogg', 'opus')?.name).toBe('voice (trimmed).ogg')
+  })
+
   it('falls back to MKV when the source’s container can’t hold a track', () => {
     // WebM can't hold AAC; a WebM with AAC in it comes from elsewhere, but it does turn up.
     const info = fakeInfo({

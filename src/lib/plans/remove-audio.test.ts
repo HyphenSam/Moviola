@@ -59,6 +59,11 @@ describe('planRemoveAudio', () => {
     expect(plan(info).plan?.keep).toEqual([1, 4])
   })
 
+  it('uses the container’s usual extension when the source’s own is one the save dialog refuses', () => {
+    expect(plan(fakeInfo({ name: 'clip.' })).plan?.name).toBe('clip (no audio).mp4')
+    expect(plan(fakeInfo({ name: 'My Video.final cut' })).plan?.name).toBe('My Video (no audio).mp4')
+  })
+
   it('keeps the source’s own extension', () => {
     expect(plan(fakeInfo({ name: 'clip.m4v' })).plan?.name).toBe('clip (no audio).m4v')
     expect(plan(fakeInfo({ name: 'match.m2ts', container: 'mpegts' })).plan).toMatchObject({

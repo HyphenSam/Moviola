@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extensionOf, outputName, stem, uniqueName } from './names'
+import { extensionOf, outputName, stem, uniqueName, usableExtension } from './names'
 
 describe('stem', () => {
   it('drops the last extension only', () => {
@@ -19,6 +19,31 @@ describe('extensionOf', () => {
     expect(extensionOf('take.2.final.mov')).toBe('mov')
     expect(extensionOf('clip')).toBeNull()
     expect(extensionOf('.hidden')).toBeNull()
+  })
+})
+
+describe('extensionOf', () => {
+  it('is empty for a name that ends in a dot', () => {
+    expect(extensionOf('clip.')).toBe('')
+  })
+})
+
+describe('usableExtension', () => {
+  it('takes letters, digits and + as written', () => {
+    for (const extension of ['mp4', 'M4V', 'm2ts', '3gp', 'c++', 'a'.repeat(15)]) {
+      expect(usableExtension(extension), extension).toBe(true)
+    }
+  })
+
+  // The save dialog throws a TypeError for an accept extension like these, dot included.
+  it('refuses one that is empty, over 16 characters with its dot, or holds anything else', () => {
+    for (const extension of ['', 'a'.repeat(16), 'final cut', 'mp4 ', 'm-v', 'vidéo', 'tar.gz', 'mp4~']) {
+      expect(usableExtension(extension), extension).toBe(false)
+    }
+  })
+
+  it('refuses no extension at all', () => {
+    expect(usableExtension(null)).toBe(false)
   })
 })
 
