@@ -35,7 +35,13 @@ export function useSource(client: WorkerClient) {
     [client],
   )
 
+  /** Drops a file that is still opening; the one already open stays. */
+  const cancelOpening = useCallback(() => {
+    latest.current++
+    setOpening(null)
+  }, [])
+
   const dismissError = useCallback(() => setError(null), [])
 
-  return { source, opening, error, open, dismissError }
+  return { source, opening, error, open, cancelOpening, dismissError }
 }

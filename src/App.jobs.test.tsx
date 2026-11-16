@@ -5,7 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type { MediaInfo } from './lib/info'
 import type { WorkerCapabilities } from './lib/protocol'
-import { fakeAudioInfo, fakeAudioTrack, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
+import {
+  deferred,
+  fakeAudioInfo,
+  fakeAudioTrack,
+  fakeClient,
+  fakeFrames,
+  fakeInfo,
+  fakeVideoTrack,
+} from './lib/testing'
 
 const video = (name = 'holiday.mp4') => new File([new Uint8Array(16)], name, { type: 'video/mp4' })
 
@@ -337,5 +345,184 @@ describe('Extract audio', () => {
     await user.upload(screen.getByLabelText('Choose file'), video('other.mp4'))
     expect(client.jobs[0].cancelled).toBe(true)
     expect(client.probed.map((f) => f.name)).toEqual(['holiday.mp4', 'other.mp4'])
+  })
+})
+
+describe('The job’s lifecycle', () => {
+  afterEach(() => {
+    delete (window as { showSaveFilePicker?: unknown }).showSaveFilePicker
+    delete (window as { ClipboardItem?: unknown }).ClipboardItem
+    vi.restoreAllMocks()
+  })
+
+  const aborted = () => new DOMException('The user aborted a request.', 'AbortError')
+  /** A save dialog that stays open until the test settles it. */
+  const openDialog = () => {
+    const dialog = deferred<FileSystemFileHandle>()
+    withPicker(() => dialog.promise)
+    return dialog
+  }
+  /** The empty file the dialog makes at once, as Chrome hands it over. */
+  const emptyFile = (name = 'holiday.m4a') => {
+    const remove = vi.fn(async () => {})
+    const handle = { name, getFile: async () => new File([], name), remove } as unknown as FileSystemFileHandle
+    return { handle, remove }
+  }
+
+  describe('while the save dialog is open', () => {
+    it('disables the action until the dialog closes', async () => {
+      const dialog = openDialog()
+      const { client, user } = await openOnExtract()
+      await user.click(extract())
+      expect(extract()).toBeDisabled()
+
+      await act(async () => dialog.reject(aborted()))
+      expect(extract()).toBeEnabled()
+      expect(client.jobs).toHaveLength(0)
+    })
+
+    it('disables Grab frame’s Save frame and Copy', async () => {
+      ;(window as unknown as { ClipboardItem: unknown }).ClipboardItem = class {}
+      openDialog()
+      const { client, user } = await openOnExtract()
+      vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue({ write: vi.fn() } as unknown as Clipboard)
+      await user.click(extract())
+      await user.click(
+        within(screen.getByRole('radiogroup', { name: 'Tools' })).getByRole('radio', { name: 'Grab frame' }),
+      )
+      expect(screen.getByRole('button', { name: 'Copy' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Save frame' })).toBeDisabled()
+      expect(client.jobs).toHaveLength(0)
+    })
+
+    it('asks before opening another file, and leaves the dialog’s job alone if told no', async () => {
+      const dialog = openDialog()
+      const { client, user } = await openOnExtract()
+      await user.click(extract())
+
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+      await user.upload(screen.getByLabelText('Choose file'), video('other.mp4'))
+      expect(confirm).toHaveBeenCalledWith('Cancel the running job and open the new file?')
+      expect(client.probed.map((f) => f.name)).toEqual(['holiday.mp4'])
+
+      const { handle } = emptyFile()
+      await act(async () => dialog.resolve(handle))
+      expect(client.jobs).toHaveLength(1)
+      expect(client.jobs[0].target).toEqual({ type: 'file', handle })
+    })
+
+    it('opens the other file if told yes, and never starts the job, whatever the dialog answers', async () => {
+      const dialog = openDialog()
+      const { client, user } = await openOnExtract()
+      await user.click(extract())
+
+      vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+      await user.upload(screen.getByLabelText('Choose file'), video('other.mp4'))
+      await waitFor(() => expect(client.probed.map((f) => f.name)).toEqual(['holiday.mp4', 'other.mp4']))
+
+      // The user picks a place after all: the empty file the dialog made is removed, and nothing runs.
+      const { handle, remove } = emptyFile()
+      await act(async () => dialog.resolve(handle))
+      expect(client.jobs).toHaveLength(0)
+      expect(remove).toHaveBeenCalled()
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Exports' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('when the save dialog fails', () => {
+    it('fails the job with an export that says so, for an error that is a bug', async () => {
+      withPicker(async () => {
+        throw new TypeError('The extension is not allowed.')
+      })
+      const { client, user } = await openOnExtract()
+      await user.click(extract())
+      const card = await within(await screen.findByRole('region', { name: 'Exports' })).findByRole('listitem')
+      expect(card).toHaveTextContent('holiday.m4a')
+      expect(card).toHaveTextContent('The save dialog couldn’t be opened: The extension is not allowed.')
+      expect(client.jobs).toHaveLength(0)
+      expect(extract()).toBeEnabled()
+    })
+
+    it.each(['SecurityError', 'NotAllowedError'])(
+      'builds in memory after a %s, and says the result is held in memory',
+      async (name) => {
+        withPicker(async () => {
+          throw new DOMException('Not here.', name)
+        })
+        const { client, user } = await openOnExtract()
+        await user.click(extract())
+        await waitFor(() => expect(client.jobs).toHaveLength(1))
+        expect(client.jobs[0].target).toEqual({ type: 'memory' })
+        expect(
+          screen.getByText(
+            'The save dialog can’t be used here, so the result is held in memory until you download it.',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+  })
+
+  it('drops a file that is still opening when a job starts, so the source can’t change under the job', async () => {
+    const slow = deferred<MediaInfo>()
+    const client = fakeClient((file) => (file.name === 'other.mp4' ? slow.promise : fakeInfo({ name: file.name })))
+    const user = userEvent.setup()
+    render(<App webCodecs client={client} frames={fakeFrames()} />)
+    await user.upload(screen.getByLabelText('Choose file'), video())
+    await screen.findByRole('region', { name: 'Open file' })
+    await user.click(extractTool())
+
+    await user.upload(screen.getByLabelText('Choose file'), video('other.mp4'))
+    expect(screen.getByText('Opening other.mp4…')).toBeInTheDocument()
+    await user.click(extract())
+    expect(screen.queryByText('Opening other.mp4…')).not.toBeInTheDocument()
+
+    await act(async () => slow.resolve(fakeInfo({ name: 'other.mp4' })))
+    expect(within(screen.getByRole('region', { name: 'Open file' })).getByTitle('holiday.mp4')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: 'Extracting holiday.m4a' })).toBeInTheDocument()
+    expect(client.jobs[0].cancelled).toBe(false)
+  })
+
+  describe('cancelling', () => {
+    it('says Cancelling… until the worker answers, then gives the action back', async () => {
+      const { client, user } = await openOnExtract()
+      client.holdCancels = true
+      await user.click(extract())
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(client.jobs[0].cancelled).toBe(true)
+      expect(screen.getByText('Cancelling…')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Extract' })).not.toBeInTheDocument()
+
+      await act(async () => client.jobs[0].fail('Cancelled.'))
+      expect(screen.queryByText('Cancelling…')).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Exports' })).not.toBeInTheDocument()
+      expect(extract()).toBeEnabled()
+    })
+
+    it('shows the saved file when the job finished before the cancel reached it', async () => {
+      const { handle } = emptyFile('my audio.m4a')
+      withPicker(async () => handle)
+      const { client, user } = await openOnExtract()
+      client.holdCancels = true
+      await user.click(extract())
+      await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+      await act(async () => client.jobs[0].finish({ size: 2000, blob: null }))
+      const card = within(exportsStrip()).getByRole('listitem')
+      expect(card).toHaveTextContent('my audio.m4a')
+      expect(card).toHaveTextContent('Saved')
+      expect(extract()).toBeEnabled()
+    })
+
+    it('opens another file without asking again while a job is cancelling', async () => {
+      const { client, user } = await openOnExtract()
+      client.holdCancels = true
+      await user.click(extract())
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      const confirm = vi.spyOn(window, 'confirm')
+      await user.upload(screen.getByLabelText('Choose file'), video('other.mp4'))
+      expect(confirm).not.toHaveBeenCalled()
+      await waitFor(() => expect(client.probed.map((f) => f.name)).toEqual(['holiday.mp4', 'other.mp4']))
+    })
   })
 })

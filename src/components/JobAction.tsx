@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
-import type { Running } from '@/hooks/useJob'
+import type { JobState } from '@/hooks/useJob'
 import type { JobPlan, Planned } from '@/lib/plan'
 import { JobProgress } from './JobProgress'
 import { LosslessBadge } from './LosslessBadge'
@@ -15,7 +15,7 @@ const BAR =
 export function JobAction({
   planned,
   verb,
-  running,
+  state,
   hint,
   secondary,
   onStart,
@@ -24,7 +24,8 @@ export function JobAction({
   /** Null for a tool with no action, which still shows a running job's progress. */
   planned: Planned<JobPlan> | null
   verb: string
-  running: Running | null
+  /** Where the job slot stands: the action is there only while it's idle (`useJob`). */
+  state: JobState
   hint?: string | null
   /** A second action beside the primary one (Grab frame's Copy). */
   secondary?: ReactNode
@@ -33,18 +34,21 @@ export function JobAction({
 }) {
   const id = useId()
   const box = useRef<HTMLDivElement>(null)
-  const busy = !!running
-  const was = useRef(busy)
-  // The action and Cancel replace each other as a job starts and ends. Focus on the one that went
-  // falls to the page; put it on the one that came instead, so the keyboard doesn't lose its place.
+  const { phase } = state
+  const idle = phase === 'idle'
+  const busy = phase === 'running' || phase === 'cancelling'
+  const was = useRef(phase)
+  // The action and Cancel replace each other as a job starts and ends, and the action is disabled
+  // while the save dialog is open or a copy is made. Focus on a button that went falls to the page;
+  // put it on the one that came instead, so the keyboard doesn't lose its place.
   useEffect(() => {
-    if (was.current === busy) return
-    was.current = busy
+    if (was.current === phase) return
+    was.current = phase
     if (document.activeElement && document.activeElement !== document.body) return
     box.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
-  }, [busy])
+  }, [phase])
 
-  const problems = !running && planned?.problems
+  const problems = !busy && planned?.problems
   return (
     <div ref={box} className="flex flex-col gap-2.5">
       {/* There before any problem is, so a problem that a change of settings brings is announced. */}
@@ -57,9 +61,16 @@ export function JobAction({
           </ul>
         )}
       </div>
-      {running ? (
+      {phase === 'running' ? (
         <div className={BAR}>
-          <JobProgress job={running} onCancel={onCancel} />
+          <JobProgress job={state} onCancel={onCancel} />
+        </div>
+      ) : phase === 'cancelling' ? (
+        // Until the worker (or the save dialog) answers, the job may still be writing.
+        <div className={BAR}>
+          <p role="status" className="py-1.5 text-[13px] text-ink-soft">
+            Cancelling…
+          </p>
         </div>
       ) : (
         planned && (
@@ -67,7 +78,7 @@ export function JobAction({
             <div className={`flex items-center gap-3 ${BAR}`}>
               <Button
                 variant="primary"
-                disabled={!planned.plan}
+                disabled={!planned.plan || !idle}
                 aria-describedby={problems ? `${id}-problems` : undefined}
                 onClick={onStart}
               >

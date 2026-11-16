@@ -91,7 +91,8 @@ export type FakeJob = {
  * 1080p, what `encodable(size)` says (the same, unless told otherwise). Keyframes fall every 2 s,
  * as in the fixtures; thumbnails come back blank (jsdom can't draw). `keyframes` and `thumbnailed`
  * list what was asked. Runs wait in `jobs` until the test finishes or fails them; cancelling rejects
- * as the worker does. */
+ * as the worker does, unless `holdCancels` is set: then a cancelled job waits for the test to settle
+ * it, like a worker that hasn't answered yet (and may answer that the job finished after all). */
 export function fakeClient(
   probe: (file: File) => MediaInfo | Promise<MediaInfo>,
   capabilities: WorkerCapabilities = ALL_CAPABLE,
@@ -101,16 +102,18 @@ export function fakeClient(
   jobs: FakeJob[]
   keyframes: { file: File; trackId: number; time: number }[]
   thumbnailed: { file: File; times: number[]; height: number }[]
+  holdCancels: boolean
 } {
   const probed: File[] = []
   const jobs: FakeJob[] = []
   const keyframes: { file: File; trackId: number; time: number }[] = []
   const thumbnailed: { file: File; times: number[]; height: number }[] = []
-  return {
+  const client: ReturnType<typeof fakeClient> = {
     probed,
     jobs,
     keyframes,
     thumbnailed,
+    holdCancels: false,
     capabilities: async () => ({
       encodeVideo: capabilities.encodeVideo,
       encodeAudio: capabilities.encodeAudio,
@@ -145,11 +148,12 @@ export function fakeClient(
         result: result.promise,
         cancel: () => {
           job.cancelled = true
-          result.reject(new Error('Cancelled.'))
+          if (!client.holdCancels) result.reject(new Error('Cancelled.'))
         },
       }
     },
   }
+  return client
 }
 
 /** Frames for the file card and the fallback preview. jsdom can't draw, so each frame is a blank

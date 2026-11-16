@@ -37,6 +37,11 @@ export function JobProgress({ job, onCancel }: { job: Running; onCancel: () => v
           <span>{fraction === null ? 'Starting…' : percent(fraction)}</span>
           {left && <span>{left}</span>}
         </p>
+        {job.inMemory && (
+          <p className="mt-1 text-xs text-ink-soft">
+            The save dialog can’t be used here, so the result is held in memory until you download it.
+          </p>
+        )}
       </div>
       <Button onClick={onCancel}>Cancel</Button>
     </div>

@@ -33,7 +33,12 @@ don't build it).
   `MediaInfo.container` lists (`ALL_FORMATS` less HLS, a playlist a single file can't be).
   If no format matches: "Moviola can't open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS
   video." The previous file, if any, stays open.
-- Opening a file while a job runs asks first: "Cancel the running job and open the new file?"
+- Opening a file while a job runs asks first: "Cancel the running job and open the new file?" A job
+  whose save dialog is still open counts as running; one that is already being cancelled doesn't ask
+  again.
+- Starting a job drops a file that is still opening (its "Opening…" line goes and the open file
+  stays), so the source can't change under the job. The last thing asked for wins, as it does between
+  two opens.
 - Exports from the previous file stay in the exports strip until removed.
 - The file is never read whole into memory. `File` objects are passed to the worker by
   structured clone (cheap; no bytes are copied).
@@ -329,7 +334,8 @@ Saves the frame at the playhead as an image.
 - A secondary "Copy" button puts the frame on the clipboard as a PNG whichever format is chosen
   (clipboards take images as PNG only; `ClipboardItem`, shown only where the browser has it). It says
   "Copied the frame." for a moment; a browser that refuses gets "The browser didn’t allow copying to the
-  clipboard. Save the frame instead."
+  clipboard. Save the frame instead." A copy takes the job slot (section 7): while one is being made,
+  Copy and "Save frame" are disabled.
 - The caption gives the size: "The full 1920 × 1080 frame."
 - Problem: the video can't be decoded ("This browser can’t decode HEVC, so it can’t show a frame.").
 - HDR video is tone-mapped by the browser's decoder; say "HDR frames are converted to SDR" in a
@@ -391,14 +397,37 @@ type Reply =
 One job runs at a time. Probing, keyframe lookups and thumbnails may run alongside a job (they're
 cheap) but never block the UI.
 
+### The job slot (`src/hooks/useJob.ts`)
+The page holds one slot, and its state is one value (`JobState`):
+
+```
+idle → picking → running → idle        (an export is added: made, or failed)
+idle → copying → idle                  (Grab frame's Copy)
+picking or running → cancelling → idle
+```
+
+- `picking`: the save dialog is open. `running`: the worker has the job. `copying`: a frame is on its
+  way to the clipboard. `cancelling`: the job was told to stop and the dialog or the worker hasn't
+  answered yet.
+- Anything but `idle` holds the slot: the primary action and Copy are disabled (or replaced by the
+  progress), so a job and a copy never run together and a second job can't start while a cancelled
+  one is still winding down.
+
 ### Where results go
 - If `window.showSaveFilePicker` exists, the primary action first opens the save dialog (suggested
   name and type from the plan) inside the click, then sends the file handle to the worker, which
   opens a writable stream on it and writes through Mediabunny's `StreamTarget` (`chunked: true`).
-  The export shows "Saved" with the name. Cancelling the dialog cancels the job quietly. A cancelled
+  The export shows "Saved" with the name. Cancelling the dialog cancels the job quietly. A job
+  cancelled while the dialog is open (by opening another file) never starts, whatever the dialog
+  answers; if the user picks a place after all, the empty file is removed. A cancelled
   or failed job aborts the stream (never closes it, which would commit a partial file) and removes
   the empty file the dialog made, where the browser has `remove()`; a file the user chose to
   replace keeps its old contents.
+- If the dialog can't be used here (it rejects with `SecurityError` or `NotAllowedError`), the job
+  falls back to memory and says so under the progress: "The save dialog can’t be used here, so the
+  result is held in memory until you download it." Any other error from the dialog is a bug (a
+  suggested name it won't take, say) and fails the job: an export card with "The save dialog couldn’t
+  be opened:" and the browser's message.
 - Otherwise the worker uses `BufferTarget` and returns the bytes as a `Blob` (transferred); the
   export has a Download button (an object URL, revoked when the export is removed). When the source
   is over 2 GB in this mode, a hint under the action warns that the result is held in memory until
@@ -409,6 +438,9 @@ cheap) but never block the UI.
 - Mediabunny's `onProgress` gives the fraction. Time remaining is estimated from elapsed time and
   the fraction once past 3%; until then show only the percentage.
 - Cancel: `conversion.cancel()`, then `writable.abort()` when streaming. The export isn't added.
+  The page shows "Cancelling…" in place of the progress until the worker answers, and only then gives
+  the action back. The worker's answer decides: if the job had finished before the cancel reached it,
+  the export is added after all (the file is on disk, and the strip must say so).
 - Errors become an export card in danger style with the message in plain words. Unknown errors keep
   Mediabunny's message after "Something went wrong:".
 - Each finished job is announced to screen readers in one sentence: "holiday.m4a is ready to

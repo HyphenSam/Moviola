@@ -82,7 +82,7 @@ type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(
  * the thumbnail and the fallback preview. Tests pass fakes for both.
  */
 export function App({ webCodecs, client, frames }: { webCodecs: boolean; client: WorkerClient; frames: OpenFrames }) {
-  const { source, opening, error, open: openSource, dismissError } = useSource(client)
+  const { source, opening, error, open: openSource, cancelOpening, dismissError } = useSource(client)
   const job = useJob(client)
   // The chosen tool belongs to one file; a newly opened file starts on its default tool.
   const [choice, setChoice] = useState<{ sourceId: number; tool: ToolId } | null>(null)
@@ -145,17 +145,21 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     [updateRange],
   )
 
-  // Opening another file while a job runs would leave the job writing for a file that's gone.
-  const { running, cancel } = job
+  // Opening another file while a job runs would leave the job writing for a file that's gone. A job
+  // whose save dialog is still open counts; one already told to stop needs no second asking. The
+  // other way round, starting a job drops a file that is still opening (`startJob`).
+  const { cancel } = job
+  const { phase } = job.state
+  const idle = phase === 'idle'
   const open = useCallback(
     (file: File) => {
-      if (running) {
+      if (phase === 'picking' || phase === 'running') {
         if (!window.confirm('Cancel the running job and open the new file?')) return
         cancel()
       }
       openSource(file)
     },
-    [running, cancel, openSource],
+    [phase, cancel, openSource],
   )
 
   const trackId =
@@ -205,9 +209,12 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     const frame = source && planGrabFrame(source.info, player.time, DEFAULT_FRAME, capabilities).plan
     if (!frame) return
     // The item takes the image's promise, so the write starts inside the click while the worker draws it.
-    const png = client.run(source.file, frame, { type: 'memory' }).result.then(({ blob }) => blob!)
+    const written = job.copy(source.file, frame, (png) =>
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]),
+    )
+    if (!written) return
     setCopyNote(null)
-    navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(
+    written.then(
       () => setCopyNote('Copied the frame.'),
       (error: unknown) =>
         setCopyNote(
@@ -255,6 +262,15 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 : converting
                   ? ['Convert', 'Converting']
                   : ['Extract', 'Extracting']
+  // A file still opening would replace the source under the job when its probe came back, so the job
+  // takes precedence: the last thing asked for wins, as between two opens (SPEC.md section 3).
+  const startJob = () => {
+    if (!source || !planned?.plan || !idle) return
+    cancelOpening()
+    void job.start(source.file, planned.plan, doing)
+  }
+  // The progress, or "Cancelling…", stands in for the action.
+  const busy = phase === 'running' || phase === 'cancelling'
   const memoryHint =
     source && tool !== 'frame' && tool !== 'animation' && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
@@ -307,7 +323,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
         className={cn(
           'flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[72px_320px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:pb-0',
           // Room at the foot for the action, which narrow screens fix to the bottom of the screen.
-          (planned || job.running) && 'pb-[calc(4rem+env(safe-area-inset-bottom))]',
+          (planned || busy) && 'pb-[calc(4rem+env(safe-area-inset-bottom))]',
         )}
       >
         {/* Over the rail and settings only, as on the sister sites, so the stage runs the full height. */}
@@ -448,25 +464,25 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
               </section>
             )}
           </div>
-          {(planned || job.running) && (
+          {(planned || busy) && (
             // Pinned at the foot of the column; on narrow screens the action itself is fixed to the bottom
             // of the screen, and what explains it stays here.
             <div className="px-5 pb-4 lg:sticky lg:bottom-0 lg:border-t lg:border-line lg:bg-panel lg:pt-4">
               <JobAction
                 planned={planned}
                 verb={verb}
-                running={job.running}
+                state={job.state}
                 hint={memoryHint}
                 secondary={
                   tool === 'frame' &&
                   canCopy &&
                   planned?.plan && (
-                    <Button onClick={copyFrame} disabled={!!job.running}>
+                    <Button onClick={copyFrame} disabled={!idle}>
                       Copy
                     </Button>
                   )
                 }
-                onStart={() => source && planned?.plan && void job.start(source.file, planned.plan, doing)}
+                onStart={startJob}
                 onCancel={job.cancel}
               />
             </div>

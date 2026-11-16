@@ -61,4 +61,18 @@ describe('useSource', () => {
     await act(async () => slow.resolve(fakeInfo({ name: 'slow.mp4' })))
     expect(result.current.source?.info.name).toBe('fast.mp4')
   })
+
+  it('drops a file that is still opening when told to, keeping the one already open', async () => {
+    const slow = deferred<ReturnType<typeof fakeInfo>>()
+    const client = fakeClient((f) => (f.name === 'slow.mp4' ? slow.promise : fakeInfo({ name: f.name })))
+    const { result } = renderHook(() => useSource(client))
+    act(() => result.current.open(file('a.mp4')))
+    await waitFor(() => expect(result.current.source?.info.name).toBe('a.mp4'))
+
+    act(() => result.current.open(file('slow.mp4')))
+    act(() => result.current.cancelOpening())
+    expect(result.current.opening).toBeNull()
+    await act(async () => slow.resolve(fakeInfo({ name: 'slow.mp4' })))
+    expect(result.current.source?.info.name).toBe('a.mp4')
+  })
 })

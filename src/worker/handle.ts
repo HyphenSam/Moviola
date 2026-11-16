@@ -1,3 +1,4 @@
+import { discard } from '@/lib/discard'
 import { isImagePlan, type AnimationPlan, type FramePlan, type Plan } from '@/lib/plan'
 import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { capabilities, encodableAt } from '@/media/encoders'
@@ -102,16 +103,4 @@ async function runImage(
   const blob =
     plan.kind === 'frame' ? await grabFrame(file, plan) : await makeAnimation(file, plan, { signal, onProgress })
   return { size: blob.size, blob }
-}
-
-/** The save dialog makes an empty file at once. If the job never wrote it, remove it, so a cancelled
- * job leaves nothing behind. A file the user chose to replace still holds its old contents (the
- * stream was aborted) and is left alone. `remove()` is Chrome's; elsewhere the empty file stays. */
-async function discard(handle: FileSystemFileHandle) {
-  try {
-    const removable = handle as FileSystemFileHandle & { remove?: () => Promise<void> }
-    if ((await handle.getFile()).size === 0) await removable.remove?.()
-  } catch {
-    // Nothing more can be done; the job's failure is what the user needs to hear about.
-  }
 }

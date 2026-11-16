@@ -117,6 +117,30 @@ describe('Grab frame', () => {
     expect(screen.queryByRole('region', { name: 'Exports' })).not.toBeInTheDocument()
   })
 
+  it('disables Copy and Save frame while a copy is in flight, so a job and a copy never run together', async () => {
+    class FakeClipboardItem {
+      constructor(public items: Record<string, Promise<Blob>>) {}
+    }
+    ;(window as unknown as { ClipboardItem: unknown }).ClipboardItem = FakeClipboardItem
+    const { client, user } = await openOnFrame()
+    // The write lasts as long as the image takes, as a real clipboard's does.
+    const write = vi.fn(async ([item]: FakeClipboardItem[]) => void (await item.items['image/png']))
+    vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue({ write } as unknown as Clipboard)
+    const copy = () => screen.getByRole('button', { name: 'Copy' })
+
+    await user.click(copy())
+    expect(copy()).toBeDisabled()
+    expect(save()).toBeDisabled()
+    await user.click(copy())
+    await user.click(save())
+    expect(client.jobs).toHaveLength(1)
+
+    await act(async () => client.jobs[0].finish({ size: 3, blob: new Blob(['png'], { type: 'image/png' }) }))
+    expect(await screen.findByText('Copied the frame.')).toBeInTheDocument()
+    expect(copy()).toBeEnabled()
+    expect(save()).toBeEnabled()
+  })
+
   it('says so in plain words when the browser refuses the clipboard', async () => {
     ;(window as unknown as { ClipboardItem: unknown }).ClipboardItem = class {}
     const { user } = await openOnFrame()
