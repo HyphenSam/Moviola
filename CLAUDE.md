@@ -80,12 +80,14 @@ is lossless or re-encodes.
   size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
   `format-bytes.ts`, `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
   checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list), `colour.ts` (the
-  colour space a browser's player assumes for a track).
+  colour space a browser's player assumes for a track), `i420.ts` (the BT.709 matrix, and where an I420
+  frame's bytes lie in the pixels the GPU draws).
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails and the page's
   preview frames), `images.ts` (Grab frame and Make animation, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
   `gpu-scaler.ts` (resizes frames with WebGL for Mediabunny; the maths is in `src/lib/scale.ts`),
-  `colour.ts` (makes a track decode in the colour space the player shows it in).
+  `colour.ts` (makes a track decode in the colour space the player shows it in), `i420.ts` (turns RGB
+  frames into BT.709 I420 with WebGL before they reach an encoder).
 - `src/worker/` the Web Worker: receives a `File` and a `Plan`, runs it with `src/media/`, posts
   progress, cancels on request.
 - `src/components/` the UI (`ui/` holds the primitives). `src/App.tsx` puts it together; it takes the
@@ -164,13 +166,28 @@ discarded.
   bitstream's own field; Chrome's H.264 has none in its VUI). Untagged or matrix-only SD came out tagged
   BT.709 and played 31% off (38% resized); now it's tagged BT.601 and plays as its source does, as HD
   and tagged sources always did. A resized output is tagged BT.709 with the sRGB transfer, which is right
-  for what was drawn.
-- Firefox (159) re-encodes in other colours, whatever the source's tags or size (31–50% of pixels off
-  by more than 24 against the source, both played in Firefox), and no tag of ours mends it. Its decoder
-  hands the encoder RGB (`BGRX`) frames, its encoder converts RGB with BT.601 whatever the frame's colour
-  space and writes no colour to H.264's VUI, yet reports BT.709, which Mediabunny writes as the tags. Its
-  `<video>` ignores an MP4 `colr` box and plays untagged H.264 as BT.709 at 360 lines too. Chrome reads
-  the tags, so relabelling those outputs BT.601 makes them play right in Chrome but not in Firefox.
+  for what was drawn (`gpu-scaler.ts` hands it on as BT.709 I420 with those tags, as Chrome tagged the
+  RGB frames it drew before).
+- Firefox (158 and 159) re-encoded in other colours, whatever the source's tags or size (31–52% of
+  pixels off by more than 24 against the source, both played in Firefox). Its decoder hands out RGB
+  (`BGRX`) frames, headed or headless, and its encoders convert RGB with BT.601 whatever the frame's
+  colour space and write no colour to H.264's VUI, yet report BT.709, which Mediabunny writes as the tags.
+  Its `<video>` ignores an MP4 `colr` box and plays untagged H.264 as BT.709 at 360 lines too, so no tag
+  mends it. Both browsers' encoders take an I420 frame's samples as they are (Firefox's still report
+  BT.709; Chrome's report the frame's tag). So where a track decodes to RGB, `videoTrackOptions` sets
+  `asBt709` (`src/media/i420.ts`) as Mediabunny's `process`, which turns each RGB frame into BT.709 I420
+  with one WebGL draw and one read back, and `gpu-scaler.ts` hands resized frames on the same way in
+  both browsers. Firefox's outputs now play within 0.1–1.6% of the source (3–6% resized, below Chrome's
+  resize noise), and Original got faster there: 20 s of 1080p took 9.3 s, now 4.5 s, as Firefox's own
+  conversion is slow. Only RGB-decoding tracks get `process`: with it set, Mediabunny draws a rotated
+  video upright rather than tagging its rotation, a lossy round trip Chrome's YUV frames don't need.
+- Untagged SD H.264 plays as BT.601 in Chrome and as BT.709 in Firefox, so the source itself looks
+  different in each, and an output can follow only one. Each browser's output follows its own player:
+  Firefox's of such a source plays 47% off in Chrome, and Chrome's resized one 37% off in Firefox.
+  Outputs of every other source made in one browser play right in the other.
+- Firefox ignores a `VideoFrame`'s plane layout and reads I420 packed tight: a 180-wide frame whose chroma
+  rows were padded to 92 bytes came out sheared. Browsers also refuse planes whose rows interleave. So
+  `i420Layout` runs the planes back to back, four bytes to a drawn pixel.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream
@@ -215,7 +232,10 @@ discarded.
   registers `gpu-scaler.ts` as a Mediabunny transformer: one textured WebGL draw, about 5 ms, bringing
   those to 26 s and 17 s; Chrome's times don't change (within half a second). It takes plain resizes of
   the whole frame and returns `null` for anything else, and Mediabunny's canvas is the fallback where
-  WebGL 2 is missing. Headless Firefox decodes in software, which hides most of the cost.
+  WebGL 2 is missing. Headless Firefox decodes in software, which hides most of the cost. It hands each
+  frame on as BT.709 I420 (above) made in the same context, reading back 1.5 bytes a pixel where
+  Mediabunny's copy of its canvas read 4: 20 s of 1080p halved took 2.7 s in headed Firefox with the
+  canvas, 6.0 s converting after the canvas, and 2.0 s now; Chrome's 1.5 s held.
 - GIF delays are hundredths of a second, which 15 fps doesn't divide; `gif.ts` ends each frame where
   its own time rounds to (7, 6, 7…), so a second of frames lasts a second. Animated WebP does the same
   in milliseconds (67, 66, 67).

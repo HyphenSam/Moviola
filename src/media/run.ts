@@ -23,6 +23,7 @@ import { planProblems, type PlanSource } from '@/lib/plan-problems'
 import { decodeAsPlayed } from './colour'
 import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
+import { asBt709, decodesToRgb } from './i420'
 import { FORMATS, keyTimestamp } from './probe'
 import { JobProblem } from './problem'
 
@@ -121,13 +122,19 @@ export function videoOptions({
  * (`decodeAsPlayed`), as the frames preview is. Chrome's encoder keeps the frames' colour space and
  * tags the output with it, so an untagged SD video decoded as BT.709 (Mediabunny's default) came out
  * tagged BT.709 and played in other colours than its source. Copied tracks are left alone, as their
- * decoder config is what the output's tags are written from. */
+ * decoder config is what the output's tags are written from.
+ *
+ * Where the decoder hands out RGB frames (Firefox's does), `asBt709` turns them into BT.709 I420 before
+ * the encoder (resized frames already are, from `gpu-scaler.ts`). Only there, as with `process` set
+ * Mediabunny draws a rotated video upright rather than tagging its rotation, a round trip through RGB
+ * that Chrome's YUV frames don't need. */
 export const videoTrackOptions =
   (video: NonNullable<Plan['video']>, keep: number[]) =>
   async (track: InputVideoTrack): Promise<ConversionVideoOptions> => {
     if (!keep.includes(track.id)) return { discard: true }
     await decodeAsPlayed(track)
-    return videoOptions(video)
+    const options = videoOptions(video)
+    return (await decodesToRgb(track)) ? { ...options, process: asBt709 } : options
   }
 
 /** A copied cut starts on the video's keyframe at or before the in point (SPEC.md 6.3), and so does
