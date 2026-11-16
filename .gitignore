@@ -7,3 +7,6 @@ dev-dist/
 # Wrangler
 .wrangler/
 .dev.vars*
+
+# Playwright CLI logs and snapshots
+.playwright-cli/
