@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createClient, type Port, type Reply, type Request } from './protocol'
+import { createClient, WORKER_STOPPED, type Port, type Reply, type Request } from './protocol'
 import type { Plan } from './plan'
 import { fakeInfo } from './testing'
 
@@ -8,12 +8,18 @@ const plan: Plan = { kind: 'audio', container: 'mp4', name: 'a.m4a', mimeType: '
 /** A worker stand-in: records what was posted and lets the test reply. */
 function fakePort() {
   const sent: Request[] = []
-  let listener: ((e: { data: Reply }) => void) | null = null
+  const listeners: Record<string, (e: { data: Reply }) => void> = {}
   const port: Port = {
     postMessage: (message) => sent.push(message),
-    addEventListener: (_type, fn) => (listener = fn),
+    addEventListener: (type: string, fn: (e: { data: Reply }) => void) => void (listeners[type] = fn),
   }
-  return { port, sent, reply: (data: Reply) => listener?.({ data }) }
+  return {
+    port,
+    sent,
+    reply: (data: Reply) => listeners.message?.({ data }),
+    /** The worker fails: its script didn't load, it died, or a message couldn't be read. */
+    fail: (type: 'error' | 'messageerror' = 'error') => listeners[type]?.({} as { data: Reply }),
+  }
 }
 
 describe('createClient', () => {
@@ -100,6 +106,32 @@ describe('createClient', () => {
     reply({ type: 'done', id: 1, value: { size: 1, blob } })
     await expect(job.result).resolves.toEqual({ size: 1, blob })
     expect(progress).toEqual([null, 0.5])
+  })
+
+  it.each(['error', 'messageerror'] as const)('rejects everything pending when the worker fails (%s)', async (type) => {
+    const { port, fail } = fakePort()
+    const client = createClient(port)
+    const probe = client.probe(new File(['x'], 'a.mp4'))
+    const capabilities = client.capabilities()
+    const job = client.run(new File(['x'], 'a.mp4'), plan, { type: 'memory' })
+    fail(type)
+    await expect(probe).rejects.toThrow(WORKER_STOPPED)
+    await expect(capabilities).rejects.toThrow(WORKER_STOPPED)
+    await expect(job.result).rejects.toThrow(WORKER_STOPPED)
+  })
+
+  it('rejects every later request once the worker has failed, without posting it', async () => {
+    const { port, sent, fail } = fakePort()
+    const client = createClient(port)
+    fail()
+    await expect(client.probe(new File(['x'], 'a.mp4'))).rejects.toThrow(
+      'Moviola’s background worker stopped. Reload the page to carry on.',
+    )
+    await expect(client.encodable({ width: 1280, height: 720 })).rejects.toThrow(WORKER_STOPPED)
+    const job = client.run(new File(['x'], 'a.mp4'), plan, { type: 'memory' })
+    await expect(job.result).rejects.toThrow(WORKER_STOPPED)
+    job.cancel()
+    expect(sent).toEqual([])
   })
 
   it('asks the worker to cancel a run by its id', () => {

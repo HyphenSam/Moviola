@@ -16,6 +16,7 @@ export function JobAction({
   planned,
   verb,
   state,
+  checking,
   hint,
   secondary,
   onStart,
@@ -26,6 +27,9 @@ export function JobAction({
   verb: string
   /** Where the job slot stands: the action is there only while it's idle (`useJob`). */
   state: JobState
+  /** The worker hasn't yet said what this browser can encode, and the plan hangs on it: say so where
+   * the problems would be. `planned` has no plan meanwhile, so the action is disabled. */
+  checking?: boolean
   hint?: string | null
   /** A second action beside the primary one (Grab frame's Copy). */
   secondary?: ReactNode
@@ -48,11 +52,13 @@ export function JobAction({
     box.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
   }, [phase])
 
-  const problems = !busy && planned?.problems
+  const waiting = !busy && !!checking
+  const problems = !busy && !waiting && !!planned?.problems?.length && planned.problems
   return (
     <div ref={box} className="flex flex-col gap-2.5">
       {/* There before any problem is, so a problem that a change of settings brings is announced. */}
       <div id={`${id}-problems`} aria-live="polite" className="empty:hidden">
+        {waiting && <p className="text-[13px] text-ink-soft">Checking what this browser can encode…</p>}
         {problems && (
           <ul className="flex flex-col gap-1 text-[13px] text-danger">
             {problems.map((p) => (
@@ -79,7 +85,7 @@ export function JobAction({
               <Button
                 variant="primary"
                 disabled={!planned.plan || !idle}
-                aria-describedby={problems ? `${id}-problems` : undefined}
+                aria-describedby={problems || waiting ? `${id}-problems` : undefined}
                 onClick={onStart}
               >
                 {verb}

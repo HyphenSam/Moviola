@@ -295,7 +295,9 @@ Re-encodes to make the file smaller, optionally resized.
   options".
 - **Codec** (segmented, under "More options"): H.264 (default; MP4), HEVC (MP4, `hvc1`), VP9
   (WebM), AV1 (MP4). Each is enabled only if `canEncodeVideo` says yes at the chosen size (the
-  worker's `encodable` request, asked once per size; the 1080p answer stands in until it replies);
+  worker's `encodable` request, asked once per size; until it replies the action waits, as in
+  section 9, and if the question fails the 1080p answer stands in until the next change of settings
+  asks again);
   the disabled ones are named under the control: "Not available in this browser: HEVC, AV1." A
   codec that becomes unavailable falls back to the first that is. Captions: H.264 "Plays
   everywhere."; HEVC "Smaller files. Plays on most phones and Macs, but not in every browser."; VP9
@@ -397,6 +399,12 @@ type Reply =
 One job runs at a time. Probing, keyframe lookups and thumbnails may run alongside a job (they're
 cheap) but never block the UI.
 
+If the worker fails (its script doesn't load, it dies, or a message can't be read: the Worker's
+`error` and `messageerror` events), the client rejects everything pending and every later request
+with one sentence: "Moviola’s background worker stopped. Reload the page to carry on." It shows
+where the open error does (`role="alert"`), on the card of a job that was running, and, with no file
+open, in an alert of its own; never twice at once.
+
 ### The job slot (`src/hooks/useJob.ts`)
 The page holds one slot, and its state is one value (`JobState`):
 
@@ -443,6 +451,9 @@ picking or running → cancelling → idle
   the export is added after all (the file is on disk, and the strip must say so).
 - Errors become an export card in danger style with the message in plain words. Unknown errors keep
   Mediabunny's message after "Something went wrong:".
+- An encoder add-on that can't be loaded (offline before the precache was complete, or an old tab
+  after a deploy) fails the job with "The MP3 encoder couldn’t be loaded. Check your connection, or
+  reload the page if Moviola was updated." The failure isn't remembered: the next job tries again.
 - Each finished job is announced to screen readers in one sentence: "holiday.m4a is ready to
   download.", "Saved holiday.m4a." or "holiday.m4a wasn't made." followed by the reason. Keyboard
   focus moves from the action to Cancel when a job starts and back when it ends.
@@ -472,6 +483,21 @@ type Capabilities = {
 
 Planners take `Capabilities` as an argument, so tests cover "Firefox without AAC" and "no HEVC"
 without a browser. Decoding is per track (`MediaInfo.tracks[].canDecode`).
+
+On the page the worker's answer is unknown, known or failed, and only a known answer may say "This
+browser can’t encode…":
+
+- **Unknown** (a moment after start-up, or after Try again): the settings are shown as if everything
+  could be encoded, so no choice is disabled or quietly changed (Precise stays Precise, MP3 stays
+  MP3). If the chosen tool's plan would differ between a browser with every encoder and one with none
+  (`dependsOnEncoders`), "Checking what this browser can encode…" stands in for the problems and the
+  action is disabled. A plan that wouldn't differ (a copy, or a problem with the file) shows as usual.
+- **Failed**: one alert, "Moviola couldn’t check what this browser can encode." with Try again, which
+  asks the worker again; actions that hang on the answer stay disabled. If the worker has stopped, the
+  alert is that sentence (section 7) with no Try again.
+
+Compress's check at the chosen size has the same three states per size (`src/hooks/useEncodable.ts`):
+the action waits with the same sentence while a size is unknown.
 
 ## 10. Copy and tone
 

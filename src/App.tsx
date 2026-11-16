@@ -27,7 +27,7 @@ import { usePlayer } from './hooks/usePlayer'
 import { useSource } from './hooks/useSource'
 import { defaultTargetMB } from './lib/bitrate'
 import { APP_NAME } from './lib/brand'
-import type { Capabilities } from './lib/capabilities'
+import { dependsOnEncoders, EVERY_ENCODER, type Capabilities } from './lib/capabilities'
 import { cn } from './lib/cn'
 import { ACCEPT } from './lib/file-types'
 import type { JobPlan, Planned } from './lib/plan'
@@ -58,7 +58,7 @@ import {
 } from './lib/plans/make-animation'
 import { planRemoveAudio } from './lib/plans/remove-audio'
 import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
-import type { WorkerCapabilities, WorkerClient } from './lib/protocol'
+import { WORKER_STOPPED, type WorkerCapabilities, type WorkerClient } from './lib/protocol'
 import { hasAudio, hasVideo, videoTrack, type MediaInfo } from './lib/info'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
@@ -72,6 +72,12 @@ const idsFor = (chosen: PerFile, sourceId: number | undefined) =>
 /** A range tool's range before the user picks one: Make animation's first five seconds, else the whole file. */
 const unpicked = (info: MediaInfo, tool: ToolId | null) =>
   tool === 'animation' ? animationRange(info) : wholeFile(info)
+
+/** What the worker said this browser can encode, if it has yet (SPEC.md section 9). */
+type EncoderState =
+  | { state: 'unknown' }
+  | { state: 'known'; value: WorkerCapabilities }
+  | { state: 'failed'; message: string }
 
 /** The installed app's file handler hands files over here (manifest `file_handlers`). */
 type LaunchQueue = { setConsumer(consumer: (params: { files: readonly { getFile(): Promise<File> }[] }) => void): void }
@@ -113,12 +119,32 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     const timer = setTimeout(() => setCopyNote(null), 4000)
     return () => clearTimeout(timer)
   }, [copyNote])
-  // What the worker can encode. Until it answers (a moment after start-up), nothing is assumed.
-  const [encoders, setEncoders] = useState<WorkerCapabilities>({ encodeVideo: {}, encodeAudio: {}, encodeWebp: false })
+  // What the worker can encode: unknown until it answers (a moment after start-up), then known, or
+  // failed until the user tries again. Only a known answer may say "this browser can't encode…".
+  const [encoders, setEncoders] = useState<EncoderState>({ state: 'unknown' })
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
-    client.capabilities().then(setEncoders, () => {})
-  }, [client])
-  const capabilities: Capabilities = { saveToDisk: canSaveToDisk(), ...encoders }
+    let live = true
+    client.capabilities().then(
+      (value) => live && setEncoders({ state: 'known', value }),
+      (e: unknown) => live && setEncoders({ state: 'failed', message: e instanceof Error ? e.message : String(e) }),
+    )
+    return () => {
+      live = false
+    }
+  }, [client, attempt])
+  const retryEncoders = () => {
+    setEncoders({ state: 'unknown' })
+    setAttempt((a) => a + 1)
+  }
+  // Before there's an answer the settings are shown as if everything could be encoded, so no choice is
+  // disabled or quietly changed on a guess (Precise to Fast, MP3 to Original); the action waits instead
+  // (`undecided`, below).
+  const saveToDisk = canSaveToDisk()
+  const capabilities: Capabilities = {
+    saveToDisk,
+    ...(encoders.state === 'known' ? encoders.value : EVERY_ENCODER),
+  }
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const install = useInstallPrompt()
@@ -187,8 +213,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const toggle = (set: typeof setDropped, ids: number[], id: number, on: boolean) =>
     source && set({ sourceId: source.id, ids: on ? [...ids, id] : ids.filter((i) => i !== id) })
 
-  // Compress asks the encoders again at the size it will write (SPEC.md section 9); until the worker
-  // answers, the 1080p answer stands in.
+  // Compress asks the encoders again at the size it will write (SPEC.md section 9), and can't start
+  // until the worker has answered for that size. If the question fails, the 1080p answer stands in
+  // and the next change of settings asks again.
   const compressing = !!source && tool === 'compress'
   const targetMB = source ? (target?.sourceId === source.id ? target.mb : defaultTargetMB(source.info.size)) : 0
   const chosenCompress = { ...compressSettings, targetMB }
@@ -196,8 +223,11 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     compressing && video
       ? outputSize(source.info, effectiveCompress(source.info, chosenCompress, capabilities).resolution)
       : null
-  const encodableHere = useEncodable(client, compressSize)
-  const compressCaps: Capabilities = { ...capabilities, encodeVideo: encodableHere ?? capabilities.encodeVideo }
+  const encodableHere = useEncodable(client, compressSize, compressSettings)
+  const compressCaps: Capabilities = {
+    ...capabilities,
+    encodeVideo: encodableHere.encoders ?? capabilities.encodeVideo,
+  }
   const compressNow = source ? effectiveCompress(source.info, chosenCompress, compressCaps) : null
 
   const animation = source
@@ -225,23 +255,40 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     )
   }
 
-  const planned: Planned<JobPlan> | null = !source
-    ? null
-    : tool === 'extract-audio'
-      ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, capabilities)
-      : tool === 'trim'
-        ? planTrim(source.info, range!, mode, CONTAINER_CODECS, capabilities)
-        : tool === 'container'
-          ? planChangeContainer(source.info, rewrap!, droppedIds, CONTAINER_CODECS)
-          : tool === 'remove-audio'
-            ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
-            : tool === 'compress'
-              ? planCompress(source.info, chosenCompress, CONTAINER_CODECS, compressCaps)
-              : tool === 'frame'
-                ? planGrabFrame(source.info, player.time, frameSettings, capabilities)
-                : tool === 'animation'
-                  ? planAnimation(source.info, range!, animation!, capabilities)
-                  : null
+  /** The chosen tool's plan in a browser with `caps`; `atSize` is what it can encode at Compress's size. */
+  const planWith = (caps: Capabilities, atSize = caps.encodeVideo): Planned<JobPlan> | null =>
+    !source
+      ? null
+      : tool === 'extract-audio'
+        ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, caps)
+        : tool === 'trim'
+          ? planTrim(source.info, range!, mode, CONTAINER_CODECS, caps)
+          : tool === 'container'
+            ? planChangeContainer(source.info, rewrap!, droppedIds, CONTAINER_CODECS)
+            : tool === 'remove-audio'
+              ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
+              : tool === 'compress'
+                ? planCompress(source.info, chosenCompress, CONTAINER_CODECS, { ...caps, encodeVideo: atSize })
+                : tool === 'frame'
+                  ? planGrabFrame(source.info, player.time, frameSettings, caps)
+                  : tool === 'animation'
+                    ? planAnimation(source.info, range!, animation!, caps)
+                    : null
+  // Without the worker's answer, a plan that would differ between a browser with every encoder and one
+  // with none can't be shown either way; one that wouldn't (a copy, or a problem with the file) can.
+  const undecided = encoders.state !== 'known' && dependsOnEncoders((e) => planWith({ saveToDisk, ...e }))
+  const waiting = undecided || (compressing && encodableHere.pending)
+  const planned: Planned<JobPlan> | null = waiting
+    ? { problems: [] }
+    : planWith(capabilities, compressCaps.encodeVideo)
+  // A failed check is said once, in the alert that offers to try again.
+  const checking = waiting && encoders.state !== 'failed'
+  const encoderError =
+    encoders.state !== 'failed'
+      ? null
+      : encoders.message === WORKER_STOPPED
+        ? WORKER_STOPPED
+        : 'Moviola couldn’t check what this browser can encode.'
   // An audio file is converted, not extracted from (SPEC.md section 6).
   const converting = !!source && !hasVideo(source.info)
   const [verb, doing] =
@@ -472,6 +519,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
                 planned={planned}
                 verb={verb}
                 state={job.state}
+                checking={checking}
                 hint={memoryHint}
                 secondary={
                   tool === 'frame' &&
@@ -525,6 +573,21 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
               <Button size="sm" variant="ghost" aria-label="Dismiss" onClick={dismissError}>
                 <X />
               </Button>
+            </div>
+          )}
+          {/* A worker that stopped fails the open as well, with the same sentence: say it once. */}
+          {encoderError && encoderError !== error && (
+            <div
+              role="alert"
+              className="flex items-center gap-3 border-b border-line bg-danger-soft px-4 py-2 text-[13px] text-ink lg:px-5"
+            >
+              <span className="min-w-0 flex-1">{encoderError}</span>
+              {/* Nothing answers once the worker has stopped, so only a reload helps. */}
+              {encoderError !== WORKER_STOPPED && (
+                <Button size="sm" onClick={retryEncoders}>
+                  Try again
+                </Button>
+              )}
             </div>
           )}
           <Stage

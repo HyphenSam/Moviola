@@ -21,6 +21,25 @@ const AUDIO: AudioEncodeCodec[] = ['aac', 'opus', 'mp3', 'flac']
 /** The codecs Mediabunny's add-ons encode in WebAssembly when the browser can't (`src/media/encoders.ts`). */
 export const ADD_ON_CODECS: readonly AudioEncodeCodec[] = ['mp3', 'flac', 'aac']
 
+/** The part the worker answers. Until it has, the page knows nothing either way. */
+export type Encoders = Omit<Capabilities, 'saveToDisk'>
+
+export const NO_ENCODERS: Encoders = { encodeVideo: {}, encodeAudio: {}, encodeWebp: false }
+/** What the settings are shown against before the worker answers, so no choice is ruled out (or
+ * quietly changed) on a guess; the action waits instead. */
+export const EVERY_ENCODER: Encoders = {
+  encodeVideo: Object.fromEntries(VIDEO.map((c) => [c, true])),
+  encodeAudio: Object.fromEntries(AUDIO.map((c) => [c, true])),
+  encodeWebp: true,
+}
+
+/** Whether an answer (a planner's, as plain data) hangs on which encoders the browser has: it does if
+ * a browser with none and one with all would be told different things. One that doesn't can be shown
+ * before the worker has said. */
+export function dependsOnEncoders(answer: (encoders: Encoders) => unknown): boolean {
+  return JSON.stringify(answer(NO_ENCODERS)) !== JSON.stringify(answer(EVERY_ENCODER))
+}
+
 /** Mediabunny's checks, passed in so this module stays free of its runtime. */
 export type EncodeChecks = {
   canEncodeVideo: (codec: VideoEncodeCodec, size: { width: number; height: number }) => Promise<boolean>

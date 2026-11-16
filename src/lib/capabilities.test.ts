@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { probeCapabilities, videoEncodersAt } from './capabilities'
+import { dependsOnEncoders, probeCapabilities, videoEncodersAt } from './capabilities'
+
+describe('dependsOnEncoders', () => {
+  it('is true for an answer that changes with the encoders, false for one that doesn’t', () => {
+    expect(dependsOnEncoders((caps) => (caps.encodeAudio.mp3 ? { plan: 1 } : { problems: ['No MP3.'] }))).toBe(true)
+    expect(dependsOnEncoders((caps) => ({ webp: caps.encodeWebp }))).toBe(true)
+    expect(dependsOnEncoders(() => ({ problems: ['This file has no video.'] }))).toBe(false)
+    expect(dependsOnEncoders(() => null)).toBe(false)
+  })
+})
 
 describe('probeCapabilities', () => {
   it('asks about each video codec at 1080p and each audio codec, natively', async () => {

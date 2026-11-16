@@ -18,12 +18,11 @@ import type { Plan } from '@/lib/plan'
 import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
 import { FORMATS, keyTimestamp } from './probe'
+import { JobProblem } from './problem'
 
 export const CANCELLED = 'Cancelled.'
 
-/** A failure worded for the user, shown as it is. Anything else is unexpected and keeps
- * Mediabunny's own message (SPEC.md section 7). */
-export class JobProblem extends Error {}
+export { JobProblem }
 
 export type RunResult = { size: number; buffer: ArrayBuffer | null }
 

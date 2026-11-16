@@ -52,7 +52,12 @@ export type WorkerClient = {
 export type Port = {
   postMessage(message: Request): void
   addEventListener(type: 'message', listener: (event: { data: Reply }) => void): void
+  addEventListener(type: 'error' | 'messageerror', listener: () => void): void
 }
+
+/** What every request is answered with once the worker has failed: its script didn't load, it died,
+ * or a message between the two couldn't be read. Nothing can be trusted to answer after that. */
+export const WORKER_STOPPED = 'Moviola’s background worker stopped. Reload the page to carry on.'
 
 type Waiting = {
   resolve: (value: unknown) => void
@@ -74,7 +79,19 @@ export function createClient(port: Port): WorkerClient {
     else waiting.reject(new Error(data.message))
   })
 
+  // A worker that failed answers nothing more, so everything waiting is told, and so is whatever
+  // is asked afterwards: a promise left pending would show as "Opening…" or "Starting…" for ever.
+  let stopped = false
+  const stop = () => {
+    stopped = true
+    for (const waiting of pending.values()) waiting.reject(new Error(WORKER_STOPPED))
+    pending.clear()
+  }
+  port.addEventListener('error', stop)
+  port.addEventListener('messageerror', stop)
+
   function send<T>(request: Request, onProgress?: Waiting['onProgress']): Promise<T> {
+    if (stopped) return Promise.reject(new Error(WORKER_STOPPED))
     return new Promise<T>((resolve, reject) => {
       pending.set(request.id, { resolve: resolve as (value: unknown) => void, reject, onProgress })
       port.postMessage(request)
@@ -92,7 +109,9 @@ export function createClient(port: Port): WorkerClient {
       const id = nextId++
       return {
         result: send<RunResult>({ type: 'run', id, file, plan, target }, onProgress),
-        cancel: () => port.postMessage({ type: 'cancel', id }),
+        cancel: () => {
+          if (!stopped) port.postMessage({ type: 'cancel', id })
+        },
       }
     },
   }
