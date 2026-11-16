@@ -10,6 +10,7 @@ import {
   MkvOutputFormat,
   Output,
   Quality,
+  type ConversionAudioOptions,
 } from 'mediabunny'
 import { describe, expect, it } from 'vitest'
 import type { AudioTrack, MediaInfo } from '@/lib/info'
@@ -21,7 +22,7 @@ import { planTrim, type TimeRange, type TrimMode } from '@/lib/plans/trim'
 import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
 import { probe } from './probe'
-import { CANCELLED, floatToInt, run, videoOptions } from './run'
+import { CANCELLED, floatToInt, JobProblem, run, transcodedCopies, videoOptions } from './run'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -313,6 +314,28 @@ describe('run', () => {
     )
     expect(stream.state).toEqual({ closed: false, aborted: true })
   })
+
+  it('refuses a plan that contradicts itself or the file before Mediabunny sees it', async () => {
+    const source = fixture('h264-aac.mp4')
+    const plan: Plan = {
+      kind: 'video',
+      container: 'mkv',
+      name: 'h264-aac.mkv',
+      mimeType: 'video/x-matroska',
+      lossless: true,
+      keep: [1, 9],
+      video: { codec: 'avc', width: 1279, height: 720 },
+    }
+    const stream = fakeFileStream()
+    const job = run(source, plan, stream.writable)
+    await expect(job).rejects.toThrow(JobProblem)
+    await expect(job).rejects.toThrow(
+      'Moviola made a plan it can’t run: It says no quality is lost, but it re-encodes the video. ' +
+        'It keeps track 9, which isn’t in the file. H.264 needs an even width and height, not 1279 × 720.',
+    )
+    expect(stream.state).toEqual({ closed: false, aborted: true })
+    expect(stream.bytes().length).toBe(0)
+  })
 })
 
 type Packet = { timestamp: number; data: Buffer }
@@ -454,6 +477,76 @@ describe('videoOptions', () => {
       forceTranscode: true,
       hardwareAcceleration: 'no-preference',
     })
+  })
+})
+
+// Plans that re-encode one kind of track and copy the other. Mediabunny's copy mode is per conversion,
+// and 'forced' refuses the re-encoded track, so these run as 'preferred', where Mediabunny may also
+// transcode a track the plan copies; run checks what it decided. Node has no WebCodecs, but Mediabunny
+// reads and writes PCM itself.
+describe('mixed plans', () => {
+  // h264-pcm.mov: H.264 video (1), 16-bit PCM audio (2).
+  const mixed: Plan = {
+    kind: 'video',
+    container: 'mkv',
+    name: 'h264-pcm.mkv',
+    mimeType: 'video/x-matroska',
+    lossless: false,
+    keep: [1, 2],
+    audio: { codec: 'pcm-s16' },
+  }
+
+  it('copies the video byte for byte while it re-encodes the audio', async () => {
+    const source = fixture('h264-pcm.mov')
+    const result = await run(source, mixed, null)
+    const output = new File([result.buffer!], mixed.name)
+    const outInfo = await probe(output)
+    expect(outInfo.tracks.map((t) => [t.kind, t.codec])).toEqual([
+      ['video', 'avc'],
+      ['audio', 'pcm-s16'],
+    ])
+    const before = await packets(source, 1)
+    const after = await packets(output, trackOf(outInfo, 'video'))
+    expect(before.length).toBeGreaterThan(10)
+    expect(after.map((p) => p.data)).toEqual(before.map((p) => p.data))
+  })
+
+  /** Mediabunny's decisions for h264-pcm.mov's audio into MKV, with the video left out. */
+  async function audioConversion(audio: ConversionAudioOptions) {
+    const input = new Input({ source: new BlobSource(fixture('h264-pcm.mov')), formats: ALL_FORMATS })
+    const output = new Output({ format: new MkvOutputFormat(), target: new BufferTarget() })
+    const conversion = await Conversion.init({
+      input,
+      output,
+      video: { discard: true },
+      audio,
+      copy: { mode: 'preferred' },
+      showWarnings: false,
+    })
+    input.dispose()
+    return conversion
+  }
+  const copyAudio: Plan = {
+    kind: 'audio',
+    container: 'mkv',
+    name: 'h264-pcm.mka',
+    mimeType: 'audio/x-matroska',
+    lossless: true,
+    keep: [2],
+  }
+
+  it('names a track the plan copies that Mediabunny would transcode', async () => {
+    // Resampling can't be done by copying, so 'preferred' transcodes it.
+    const conversion = await audioConversion({ sampleRate: 24000 })
+    expect(transcodedCopies(copyAudio, conversion)).toEqual([
+      'The PCM 16-bit audio (track 2) would be re-encoded, but it’s meant to be copied as it is.',
+    ])
+  })
+
+  it('passes tracks copied as planned, and tracks the plan re-encodes', async () => {
+    expect(transcodedCopies(copyAudio, await audioConversion({}))).toEqual([])
+    const reencode: Plan = { ...copyAudio, lossless: false, audio: { codec: 'pcm-s16', sampleRate: 24000 } }
+    expect(transcodedCopies(reencode, await audioConversion({ sampleRate: 24000 }))).toEqual([])
   })
 })
 

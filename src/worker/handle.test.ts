@@ -250,7 +250,7 @@ describe('worker handle, run', () => {
 
   it('passes a problem worded for the user on as it is', async () => {
     const { replies, send } = worker()
-    const webm: Plan = { ...m4a, container: 'webm', name: 'x.webm', mimeType: 'video/webm', keep: [1] }
+    const webm: Plan = { ...m4a, kind: 'video', container: 'webm', name: 'x.webm', mimeType: 'video/webm', keep: [1] }
     await send({ type: 'run', id: 7, file: fixture('h264-aac.mp4'), plan: webm, target: { type: 'memory' } })
     expect(replies.at(-1)).toEqual({
       type: 'failed',

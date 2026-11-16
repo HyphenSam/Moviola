@@ -1,5 +1,5 @@
 import type { Capabilities } from '../capabilities'
-import { losslessAudioContainer, type ContainerCodecs, type Destination } from '../containers'
+import { destination, losslessAudioContainer, type ContainerCodecs, type Destination } from '../containers'
 import { audioSummary, codecName, languageName, PCM_BITS, type AudioTrack, type MediaInfo } from '../info'
 import { outputName } from '../names'
 import type { Plan, Planned } from '../plan'
@@ -72,9 +72,9 @@ function mp3SampleRate(rate: number): number | undefined {
   return rate % 11025 === 0 ? 44100 : 48000
 }
 
-const MP3: Destination = { container: 'mp3', extension: 'mp3', mimeType: 'audio/mpeg' }
-const WAV: Destination = { container: 'wav', extension: 'wav', mimeType: 'audio/wav' }
-const FLAC: Destination = { container: 'flac', extension: 'flac', mimeType: 'audio/flac' }
+const MP3 = destination('mp3', 'audio')
+const WAV = destination('wav', 'audio')
+const FLAC = destination('flac', 'audio')
 
 /** Extract audio (SPEC.md 6.2): one audio track, copied untouched into the container that fits its
  * codec (Original), or converted to MP3, WAV or FLAC. */

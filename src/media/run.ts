@@ -4,6 +4,8 @@ import {
   BufferTarget,
   Conversion,
   ConversionCanceledError,
+  EncodedAudioPacketSource,
+  EncodedVideoPacketSource,
   Input,
   Output,
   Quality,
@@ -14,7 +16,9 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import { discardedSentence } from '@/lib/discarded'
+import { codecName } from '@/lib/info'
 import type { Plan } from '@/lib/plan'
+import { planProblems, type PlanSource } from '@/lib/plan-problems'
 import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
 import { FORMATS, keyTimestamp } from './probe'
@@ -114,10 +118,36 @@ export function videoOptions({
  * everything else, so the result starts there in every container and player. Left to Mediabunny, a
  * container that holds negative timestamps (MP4) would start at the in point and hide the lead-in
  * behind an edit list, which players honour unevenly. */
+/** The file as `planProblems` needs it, read from the input Mediabunny will convert. */
+async function planSource(name: string, input: Input): Promise<PlanSource> {
+  const [format, tracks] = await Promise.all([input.getFormat(), input.getTracks()])
+  return {
+    name,
+    container: FORMATS.get(format)!,
+    tracks: await Promise.all(tracks.map(async (t) => ({ id: t.id, kind: t.type, codec: await t.getCodec() }))),
+  }
+}
+
 async function fromKeyframe(input: Input, keep: number[], trim: { start: number; end: number }) {
   const video = (await input.getVideoTracks()).find((t) => keep.includes(t.id))
   const key = video && (await keyTimestamp(video, trim.start))
   return key != null && key < trim.start ? { ...trim, start: key } : trim
+}
+
+/** The tracks the plan copies that Mediabunny decided to transcode, as sentences. A plan that
+ * re-encodes anything runs in Mediabunny's 'preferred' copy mode, since 'forced' refuses the
+ * re-encoded tracks too, and 'preferred' transcodes any track it can't copy. Mediabunny adds output
+ * tracks in the order of `utilizedTracks`, each fed by a packet source when it's copied and a sample
+ * source when it's transcoded. */
+export function transcodedCopies(plan: Plan, conversion: Conversion): string[] {
+  return conversion.utilizedTracks.flatMap((track, i) => {
+    const copies = track.isVideoTrack() ? !plan.video : !plan.audio
+    const source = conversion.output.tracks[i].source
+    const copied = source instanceof EncodedVideoPacketSource || source instanceof EncodedAudioPacketSource
+    if (!copies || copied) return []
+    const what = `${codecName(track.codec, null)} ${track.type}`
+    return [`The ${what} (track ${track.id}) would be re-encoded, but it’s meant to be copied as it is.`]
+  })
 }
 
 /** Runs a plan: every kept track copied as is (`copy: { mode: 'forced' }`, so nothing is ever quietly
@@ -157,6 +187,9 @@ export async function run(
   const video = plan.video
 
   try {
+    // A planner's mistake stops here, worded as a problem, rather than reaching Mediabunny.
+    const wrong = planProblems(plan, await planSource(file.name, input))
+    if (wrong.length) throw new JobProblem(`Moviola made a plan it can’t run: ${wrong.join(' ')}`)
     if (encode) await ensureEncoder(encode.codec)
     if (signal?.aborted) throw new ConversionCanceledError()
     const trim = plan.trim && !video ? await fromKeyframe(input, plan.keep, plan.trim) : plan.trim
@@ -172,10 +205,14 @@ export async function run(
       // Some containers can't start before 0 (Ogg, with Opus's pre-roll at −7 ms; and a trim's copied
       // video, which starts on the keyframe before the in point), so copied media may be shifted;
       // Mediabunny keeps every track in sync when it does. Only a plan that re-encodes lets Mediabunny
-      // transcode; anything else is copied or refused.
+      // transcode, and `transcodedCopies` refuses it for the tracks that plan copies; anything else is
+      // copied or refused.
       copy: { mode: encode || video ? 'preferred' : 'forced', shiftTolerance: Infinity, boundaryPolicy: 'expand' },
       showWarnings: false,
     })
+
+    const transcoded = transcodedCopies(plan, conversion)
+    if (transcoded.length) throw new JobProblem(transcoded.join(' '))
 
     // Tracks the plan left out don't matter, whatever Mediabunny's reason.
     const problems = conversion.discardedTracks

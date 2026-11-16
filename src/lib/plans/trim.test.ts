@@ -99,6 +99,22 @@ describe('planTrim, Fast', () => {
     expect(planned.hints).toEqual(['Moviola can’t tell which codec an audio track uses, so it’s left out.'])
   })
 
+  it('calls the cut audio when the video it leaves out was all the video there was', () => {
+    const info = fakeInfo({
+      name: 'odd.mkv',
+      container: 'mkv',
+      tracks: [fakeVideoTrack({ codec: null, codecString: null }), fakeAudioTrack()],
+    })
+    const planned = plan(info)
+    expect(planned.plan).toMatchObject({
+      kind: 'audio',
+      name: 'odd (trimmed).mkv',
+      mimeType: 'audio/x-matroska',
+      keep: [2],
+    })
+    expect(planned.hints).toEqual(['Moviola can’t tell which codec a video track uses, so it’s left out.'])
+  })
+
   it('cuts an audio file too, named and typed as audio', () => {
     const planned = plan(fakeAudioInfo())
     expect(planned.plan).toEqual({

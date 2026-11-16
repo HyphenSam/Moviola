@@ -76,7 +76,8 @@ export function planTrim(
   const container = [info.container, ...fallbacks].find(holdsAll)
   if (!container) return { problems: ['Moviola can’t write these tracks into any file type it knows.'] }
 
-  const kind = video ? 'video' : 'audio'
+  // Audio when the only video is one left out for its unknown codec.
+  const kind = known.some((t) => t.kind === 'video') ? 'video' : 'audio'
   const { extension, mimeType } = destination(container, kind, known.find((t) => t.kind === 'audio')?.codec)
   // The source's own extension as written, unless the save dialog would refuse it.
   const own = container === info.container ? extensionOf(info.name) : null

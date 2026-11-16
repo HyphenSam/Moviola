@@ -78,7 +78,8 @@ is lossless or re-encodes.
   `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
   size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
-  `format-bytes.ts`, `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list).
+  `format-bytes.ts`, `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
+  checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list).
 - `src/media/` Mediabunny wiring: `probe.ts`, `run.ts`, `formats.ts` (the output formats, and what
   each container holds as plain data for the planners), `frames.ts` (thumbnails and the page's
   preview frames), `images.ts` (Grab frame and Make animation, from `CanvasSink` in the worker), `encoders.ts` (registers the MP3, FLAC and AAC encoder add-ons when the browser lacks them),
@@ -134,6 +135,11 @@ discarded.
 - Mediabunny mixes 5.1 down to stereo properly but has no rule for 7.1 (it keeps only the front pair,
   losing the centre's dialogue), so `run.ts` mixes 7.1 itself in `process`. Its WAV writer has no
   channel mask, so players infer 5.1 or 7.1 from the channel count.
+- `copy: { mode: 'forced' }` can't be combined with `forceTranscode` on some tracks: Mediabunny 1.65
+  discards those as `cannot_copy`. So a plan that re-encodes one kind runs in `'preferred'`, which may
+  also transcode a track the plan copies. Nothing on the `Conversion` says which, but each of
+  `output.tracks` (in `utilizedTracks` order) is fed by an `Encoded*PacketSource` only when copied;
+  `transcodedCopies` in `run.ts` refuses the rest.
 - A copied trim into MP4 keeps the in point and writes the keyframe lead-in at negative times behind
   an edit list. `run.ts` moves the start back to the keyframe itself, so the cut is where the UI says.
 - `new Quality(n)` is a quality level from 0 to 1, not a bitrate; a bitrate is `new Quality({ bitrate })`.
