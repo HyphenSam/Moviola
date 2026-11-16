@@ -155,8 +155,22 @@ discarded.
   `src/media/colour.ts` wraps the track's `getDecoderConfig` with the colour space the player would
   guess, before any sink is made; frames, thumbnails, Grab frame and Make animation then match Chrome's
   playback exactly. Only the matrix changes the pixels; drawing doesn't convert primaries. Firefox's
-  decoder ignores the config's colour space, and its `<video>` and decode agree anyway. Conversions
-  don't use this. Safari is unchecked.
+  decoder ignores the config's colour space, and its `<video>` and decode agree anyway. Safari is
+  unchecked.
+- Re-encoding video uses `decodeAsPlayed` too (`videoTrackOptions` in `run.ts`; Mediabunny's
+  `Conversion` reuses the input's track objects). Chrome's encoder keeps a YUV frame's colour space and
+  converts an RGB one (a resized frame, drawn on a canvas) with its tag's matrix, then reports that
+  colour space, which Mediabunny writes as the output's tags (MP4 `colr`, Matroska `Colour`, and the VP9
+  bitstream's own field; Chrome's H.264 has none in its VUI). Untagged or matrix-only SD came out tagged
+  BT.709 and played 31% off (38% resized); now it's tagged BT.601 and plays as its source does, as HD
+  and tagged sources always did. A resized output is tagged BT.709 with the sRGB transfer, which is right
+  for what was drawn.
+- Firefox (159) re-encodes in other colours, whatever the source's tags or size (31–50% of pixels off
+  by more than 24 against the source, both played in Firefox), and no tag of ours mends it. Its decoder
+  hands the encoder RGB (`BGRX`) frames, its encoder converts RGB with BT.601 whatever the frame's colour
+  space and writes no colour to H.264's VUI, yet reports BT.709, which Mediabunny writes as the tags. Its
+  `<video>` ignores an MP4 `colr` box and plays untagged H.264 as BT.709 at 360 lines too. Chrome reads
+  the tags, so relabelling those outputs BT.601 makes them play right in Chrome but not in Firefox.
 - Browsers can't decode AC-3, E-AC-3, DTS or TrueHD. Copying them works; converting them doesn't,
   and the UI says so.
 - Mediabunny closes a `StreamTarget`'s stream when an output is cancelled, and closing a file stream

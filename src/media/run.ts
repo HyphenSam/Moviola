@@ -13,12 +13,14 @@ import {
   type ConversionAudioOptions,
   type ConversionVideoOptions,
   type InputTrack,
+  type InputVideoTrack,
   type StreamTargetChunk,
 } from 'mediabunny'
 import { discardedSentence } from '@/lib/discarded'
 import { codecName } from '@/lib/info'
 import type { Plan } from '@/lib/plan'
 import { planProblems, type PlanSource } from '@/lib/plan-problems'
+import { decodeAsPlayed } from './colour'
 import { ensureEncoder } from './encoders'
 import { outputFormat } from './formats'
 import { FORMATS, keyTimestamp } from './probe'
@@ -114,6 +116,20 @@ export function videoOptions({
   }
 }
 
+/** Mediabunny's options for each video track of a plan that re-encodes video: the plan's, for the
+ * tracks it keeps. Each is decoded in the colour space the browser's `<video>` assumes for it
+ * (`decodeAsPlayed`), as the frames preview is. Chrome's encoder keeps the frames' colour space and
+ * tags the output with it, so an untagged SD video decoded as BT.709 (Mediabunny's default) came out
+ * tagged BT.709 and played in other colours than its source. Copied tracks are left alone, as their
+ * decoder config is what the output's tags are written from. */
+export const videoTrackOptions =
+  (video: NonNullable<Plan['video']>, keep: number[]) =>
+  async (track: InputVideoTrack): Promise<ConversionVideoOptions> => {
+    if (!keep.includes(track.id)) return { discard: true }
+    await decodeAsPlayed(track)
+    return videoOptions(video)
+  }
+
 /** A copied cut starts on the video's keyframe at or before the in point (SPEC.md 6.3), and so does
  * everything else, so the result starts there in every container and player. Left to Mediabunny, a
  * container that holds negative timestamps (MP4) would start at the in point and hide the lead-in
@@ -196,7 +212,7 @@ export async function run(
     const conversion = await Conversion.init({
       input,
       output,
-      video: video ? (track) => (plan.keep.includes(track.id) ? videoOptions(video) : { discard: true }) : keep,
+      video: video ? videoTrackOptions(video, plan.keep) : keep,
       audio: encode
         ? async (track) =>
             plan.keep.includes(track.id) ? audioOptions(encode, await track.getNumberOfChannels()) : { discard: true }

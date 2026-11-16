@@ -22,7 +22,7 @@ import { planTrim, type TimeRange, type TrimMode } from '@/lib/plans/trim'
 import { ALL_CAPABLE } from '@/lib/testing'
 import { CONTAINER_CODECS } from './formats'
 import { probe } from './probe'
-import { CANCELLED, floatToInt, JobProblem, run, transcodedCopies, videoOptions } from './run'
+import { CANCELLED, floatToInt, JobProblem, run, transcodedCopies, videoOptions, videoTrackOptions } from './run'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -463,6 +463,23 @@ describe('videoOptions', () => {
       forceTranscode: true,
       hardwareAcceleration: 'no-preference',
     })
+  })
+
+  // Chrome's encoder keeps the decoded frames' colour space, so an untagged SD source decoded as BT.709
+  // (Mediabunny's default) came out tagged BT.709 and played in other colours than the source (31% of
+  // pixels off by more than 24). Decoded in the colour space the player assumes, it plays the same.
+  it('decodes each re-encoded track in the colour space the player assumes for it', async () => {
+    const input = new Input({ source: new BlobSource(fixture('h264-aac.mp4')), formats: ALL_FORMATS })
+    const track = (await input.getPrimaryVideoTrack())!
+    const plan = { codec: 'avc', bitrate: 4_000_000 } as const
+    expect(await videoTrackOptions(plan, [track.id])(track)).toEqual(videoOptions(plan))
+    expect((await track.getDecoderConfig())!.colorSpace).toMatchObject({ matrix: 'smpte170m' })
+  })
+
+  it('leaves out a video track the plan doesn’t keep', async () => {
+    const input = new Input({ source: new BlobSource(fixture('h264-aac.mp4')), formats: ALL_FORMATS })
+    const track = (await input.getPrimaryVideoTrack())!
+    expect(await videoTrackOptions({ codec: 'avc' }, [99])(track)).toEqual({ discard: true })
   })
 
   it('holds the bitrate constant when the plan says so, for a target size', () => {
