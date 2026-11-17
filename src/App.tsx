@@ -18,6 +18,7 @@ import { Stage } from './components/Stage'
 import { ThemeMenu } from './components/ThemeMenu'
 import { ToolRail } from './components/ToolRail'
 import { TrimView } from './components/TrimView'
+import { UpdateBanner } from './components/UpdateBanner'
 import { Button } from './components/ui/Button'
 import { useEncodable } from './hooks/useEncodable'
 import { useInstallPrompt } from './hooks/useInstallPrompt'
@@ -605,7 +606,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
         </main>
 
         {/* After the settings on narrow screens (DESIGN.md), at the foot of the stage on wide ones. */}
-        <ExportsStrip exports={job.exports} note={job.note} onRemove={job.remove} />
+        <ExportsStrip exports={job.exports} note={job.note} onRemove={job.remove} onDownload={job.downloaded} />
 
         <div
           aria-hidden="true"
@@ -617,6 +618,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           Drop to open
         </div>
       </div>
+      <UpdateBanner atStake={{ running: job.state.phase === 'running', undownloaded: job.undownloaded }} />
     </Tooltip.Provider>
   )
 }

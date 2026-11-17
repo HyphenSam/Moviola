@@ -108,5 +108,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
     setupFiles: ['src/test-setup.ts'],
+    // vite-plugin-pwa serves its module only to builds and the dev server; tests get one that never
+    // finds an update, and mock it where they need one.
+    alias: { 'virtual:pwa-register/react': join(root, 'src/test-pwa.ts') },
   },
 })

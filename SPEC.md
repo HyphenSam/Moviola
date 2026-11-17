@@ -479,7 +479,25 @@ picking or running → cancelling → idle
   focus moves from the action to Cancel when a job starts and back when it ends.
 
 ### Leaving the page
-While a job runs, `beforeunload` asks the browser to confirm.
+`beforeunload` asks the browser to confirm while a job runs, and while any result held in memory
+hasn't been downloaded. A result counts as downloaded once its Download link is clicked; removing it
+from the strip also stops the asking. Results saved to disk never ask.
+
+A new version downloaded in the background shows a banner, "A new version is ready.", with Reload
+and Later (`src/components/UpdateBanner.tsx`). It says what reloading would lose
+(`src/lib/leaving.ts`): "Reloading will cancel the running job.", "Reloading will discard 2 results
+you haven’t downloaded.", or both in one sentence. Reload lets the new version take control, and
+vite-plugin-pwa then calls every open tab that saw it waiting, which by default reloads them all:
+
+- The tab whose Reload was pressed reloads, and the browser asks first if anything would be lost.
+- Any other tab reloads only if it would lose nothing. Otherwise it stays as it is, its job still
+  running, and says "Moviola was updated in another tab. Reload when you’re done here." with a
+  Reload button.
+- A tab that stays (the one above, or one whose user stayed at the leave prompt: "Moviola was
+  updated. Reload when you’re done here.") is the old page under the new service worker. Jobs still
+  run there, and a job that was running finishes. Its lazily loaded encoder add-ons keep their
+  names across builds until the add-ons themselves change; then the old chunks are gone from the
+  precache and the server, and the job fails with the add-on message above.
 
 ## 8. Naming (`src/lib/names.ts`)
 

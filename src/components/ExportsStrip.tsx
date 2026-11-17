@@ -12,10 +12,12 @@ export function ExportsStrip({
   exports,
   note,
   onRemove,
+  onDownload,
 }: {
   exports: Export[]
   note: string
   onRemove: (id: number) => void
+  onDownload: (id: number) => void
 }) {
   const list = useRef<HTMLUListElement>(null)
   // Where a removed card was, so focus can go to the card that takes its place.
@@ -41,6 +43,7 @@ export function ExportsStrip({
               <ExportCard
                 key={e.id}
                 item={e}
+                onDownload={() => onDownload(e.id)}
                 onRemove={() => {
                   removed.current = i
                   onRemove(e.id)
@@ -54,7 +57,7 @@ export function ExportsStrip({
   )
 }
 
-function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) {
+function ExportCard({ item, onRemove, onDownload }: { item: Export; onRemove: () => void; onDownload: () => void }) {
   const failed = item.error !== undefined
   const image = item.kind === 'frame' || item.kind === 'animation'
   const Icon = failed ? AlertCircle : item.kind === 'audio' ? AudioLines : image ? Image : Film
@@ -90,6 +93,7 @@ function ExportCard({ item, onRemove }: { item: Export; onRemove: () => void }) 
           <a
             href={item.url}
             download={item.name}
+            onClick={onDownload}
             className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-control bg-panel px-2.5 text-[13px] font-medium text-ink shadow-[0_0_0_1px_var(--color-line-strong)] transition-colors duration-150 hover:bg-sunken [&_svg]:size-4"
           >
             <Download aria-hidden="true" />

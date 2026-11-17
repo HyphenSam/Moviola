@@ -4,7 +4,8 @@ import { uniqueName } from '@/lib/names'
 import { isImagePlan, type FramePlan, type JobPlan, type Plan } from '@/lib/plan'
 import type { TargetSpec, WorkerClient } from '@/lib/protocol'
 
-/** A result in the exports strip: downloadable (`url`), saved to disk, or failed (`error`). */
+/** A result in the exports strip: downloadable (`url`, and `downloaded` once its link was clicked),
+ * saved to disk, or failed (`error`). */
 export type Export = {
   id: number
   name: string
@@ -12,7 +13,10 @@ export type Export = {
   sourceSize: number
   /** Compress's results are checked against the source and the target (Plan `sizeCheck`). */
   sizeCheck?: Plan['sizeCheck']
-} & ({ size: number; url: string | null; error?: never } | { error: string; size?: never; url?: never })
+} & (
+  | { size: number; url: string | null; downloaded?: boolean; error?: never }
+  | { error: string; size?: never; url?: never; downloaded?: never }
+)
 
 /**
  * Where the one job slot stands (SPEC.md section 7). Anything but `idle` holds the slot, so nothing
@@ -199,16 +203,24 @@ export function useJob(client: WorkerClient) {
     setExports((list) => list.filter((e) => e.id !== id))
   }, [])
 
+  /** Marks a result as downloaded (its link was clicked), so leaving no longer asks about it. */
+  const downloaded = useCallback((id: number) => {
+    setExports((list) => list.map((e) => (e.id === id && e.url ? { ...e, downloaded: true } : e)))
+  }, [])
+
   useEffect(() => () => latest.current.forEach((e) => e.url && URL.revokeObjectURL(e.url)), [])
 
-  // While a job runs, leaving the page asks first (SPEC.md section 7).
+  // While a job runs or a result held in memory hasn't been downloaded, leaving the page asks first
+  // (SPEC.md section 7).
   const running = state.phase === 'running'
+  const undownloaded = exports.filter((e) => e.url && !e.downloaded).length
+  const losing = running || undownloaded > 0
   useEffect(() => {
-    if (!running) return
+    if (!losing) return
     const ask = (e: BeforeUnloadEvent) => e.preventDefault()
     window.addEventListener('beforeunload', ask)
     return () => window.removeEventListener('beforeunload', ask)
-  }, [running])
+  }, [losing])
 
-  return { state, exports, note, start, cancel, copy, remove }
+  return { state, exports, note, undownloaded, start, cancel, copy, remove, downloaded }
 }

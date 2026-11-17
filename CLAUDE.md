@@ -78,7 +78,7 @@ is lossless or re-encodes.
   `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
   size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
-  `format-bytes.ts`, `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
+  `format-bytes.ts`, `leaving.ts` (what leaving or reloading would lose), `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
   checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list), `colour.ts` (the
   colour space a browser's player assumes for a track), `i420.ts` (the BT.709 matrix, and where an I420
   frame's bytes lie in the pixels the GPU draws).
@@ -242,6 +242,10 @@ discarded.
 - A canvas asked for a type it can't write (WebP in some browsers) quietly writes a PNG, so check the
   blob's `type`. Chrome won't encode an `OffscreenCanvas` that has no context at all; Firefox will.
   Both write lossless WebP at quality 1, and Chrome adds an ICC profile chunk to its stills.
+- The desktop app's built-in browser never shows a `beforeunload` prompt: the page leaves as if the
+  user agreed. Check leave prompts in Chrome and Firefox through Playwright, which reports them as
+  dialogs. Playwright's Firefox doesn't navigate when a prompt is dismissed and the next one accepted
+  (a bare page does the same); one accepted prompt navigates.
 - The desktop app's built-in browser denies `clipboard-write` outright (even text), so Grab frame's Copy
   can't be checked there; check it through Playwright (Chrome or Firefox), with a real click.
 - Mediabunny 1.65 misreads a bare FLAC file's duration and packet stats when both are computed at
@@ -272,6 +276,9 @@ discarded.
   once. It must send CORS and `Cross-Origin-Resource-Policy: cross-origin`, or COEP blocks it.
   `FALLBACK_APPS` in `src/lib/apps.ts` is used until it arrives or if it can't; the service worker
   caches the list and icons (stale while revalidate), so the launcher works offline after one opening.
+- vite-plugin-pwa (`prompt` mode) reloads every tab that saw the waiting worker once Reload in any
+  of them hands over, so `UpdateBanner` passes `onNeedReload`: only the tab that pressed Reload, or a
+  tab with nothing to lose, reloads. Tests alias `virtual:pwa-register/react` to `src/test-pwa.ts`.
 - The service worker precaches everything, the encoder add-ons included (about 2 MB of the 3.6 MB),
   so the whole app works offline after one visit. `scripts/precache.ts` fails the build if a built file
   is missing from `sw.js`'s list. vite-plugin-pwa adds the manifest's icons on its own as well as the

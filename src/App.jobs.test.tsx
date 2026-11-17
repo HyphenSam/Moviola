@@ -317,17 +317,40 @@ describe('Extract audio', () => {
     expect(within(card).queryByRole('link')).not.toBeInTheDocument()
   })
 
-  it('asks the browser to confirm leaving while a job runs, and not otherwise', async () => {
+  const leave = () => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+
+  it('asks the browser to confirm leaving while a job runs, and not once its result is saved', async () => {
+    withPicker(async () => ({ name: 'holiday.m4a' }) as FileSystemFileHandle)
     const { client, user } = await openOnExtract()
-    const leave = () => {
-      const event = new Event('beforeunload', { cancelable: true })
-      window.dispatchEvent(event)
-      return event.defaultPrevented
-    }
     expect(leave()).toBe(false)
     await user.click(extract())
     expect(leave()).toBe(true)
+    await act(async () => client.jobs[0].finish({ size: 1, blob: null }))
+    expect(leave()).toBe(false)
+  })
+
+  it('asks the browser to confirm leaving while a result in memory hasn’t been downloaded', async () => {
+    const { client, user } = await openOnExtract()
+    await user.click(extract())
     await act(async () => client.jobs[0].finish({ size: 1, blob: new Blob(['x']) }))
+    expect(leave()).toBe(true)
+    // jsdom can't download; the click is what counts.
+    const link = within(exportsStrip()).getByRole('link', { name: 'Download' })
+    link.addEventListener('click', (e) => e.preventDefault())
+    await user.click(link)
+    expect(leave()).toBe(false)
+  })
+
+  it('stops asking about an undownloaded result once it’s removed', async () => {
+    const { client, user } = await openOnExtract()
+    await user.click(extract())
+    await act(async () => client.jobs[0].finish({ size: 1, blob: new Blob(['x']) }))
+    expect(leave()).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Remove holiday.m4a' }))
     expect(leave()).toBe(false)
   })
 
