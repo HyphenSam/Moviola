@@ -15,7 +15,9 @@ export type Capabilities = {
 export type VideoEncodeCodec = 'avc' | 'hevc' | 'vp9' | 'av1'
 export type AudioEncodeCodec = 'aac' | 'opus' | 'mp3' | 'flac'
 
-const VIDEO: VideoEncodeCodec[] = ['avc', 'hevc', 'vp9', 'av1']
+/** The video codecs Moviola encodes, in order of preference: Compress falls back to the first one this
+ * browser has. */
+export const VIDEO_ENCODE_CODECS: readonly VideoEncodeCodec[] = ['avc', 'hevc', 'vp9', 'av1']
 const AUDIO: AudioEncodeCodec[] = ['aac', 'opus', 'mp3', 'flac']
 
 /** The codecs Mediabunny's add-ons encode in WebAssembly when the browser can't (`src/media/encoders.ts`). */
@@ -28,7 +30,7 @@ export const NO_ENCODERS: Encoders = { encodeVideo: {}, encodeAudio: {}, encodeW
 /** What the settings are shown against before the worker answers, so no choice is ruled out (or
  * quietly changed) on a guess; the action waits instead. */
 export const EVERY_ENCODER: Encoders = {
-  encodeVideo: Object.fromEntries(VIDEO.map((c) => [c, true])),
+  encodeVideo: Object.fromEntries(VIDEO_ENCODE_CODECS.map((c) => [c, true])),
   encodeAudio: Object.fromEntries(AUDIO.map((c) => [c, true])),
   encodeWebp: true,
 }
@@ -57,8 +59,8 @@ export async function videoEncodersAt(
   check: EncodeChecks['canEncodeVideo'],
   size: { width: number; height: number },
 ): Promise<Capabilities['encodeVideo']> {
-  const video = await Promise.all(VIDEO.map((c) => ask(() => check(c, size))))
-  return Object.fromEntries(VIDEO.map((c, i) => [c, video[i]]))
+  const video = await Promise.all(VIDEO_ENCODE_CODECS.map((c) => ask(() => check(c, size))))
+  return Object.fromEntries(VIDEO_ENCODE_CODECS.map((c, i) => [c, video[i]]))
 }
 
 export async function probeCapabilities(checks: EncodeChecks): Promise<Omit<Capabilities, 'saveToDisk'>> {

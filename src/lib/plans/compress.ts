@@ -9,12 +9,13 @@ import {
   targetVideoBitrate,
   type QualityPreset,
 } from '../bitrate'
-import type { Capabilities, VideoEncodeCodec } from '../capabilities'
+import { VIDEO_ENCODE_CODECS, type Capabilities, type VideoEncodeCodec } from '../capabilities'
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
 import {
   CONTAINER_NAMES,
   codecName,
   formatBitrate,
+  unnamedCodecHint,
   videoTrack,
   type AudioTrack,
   type MediaInfo,
@@ -80,7 +81,6 @@ export function outputSize(info: MediaInfo, resolution: Resolution) {
   return video ? scaledSize(video.width, video.height, shorterSide(resolution)) : { width: 0, height: 0 }
 }
 
-const CODECS: VideoEncodeCodec[] = ['avc', 'hevc', 'vp9', 'av1']
 const CODEC_LABELS: Record<VideoEncodeCodec, string> = { avc: 'H.264', hevc: 'HEVC', vp9: 'VP9', av1: 'AV1' }
 const CODEC_CAPTIONS: Record<VideoEncodeCodec, string> = {
   avc: 'Plays everywhere.',
@@ -94,7 +94,7 @@ const CONTAINER: Record<VideoEncodeCodec, OutputContainer> = { avc: 'mp4', hevc:
 /** The codecs, each enabled when this browser can encode it; `caps.encodeVideo` must be the answer
  * at the chosen size. */
 export function codecOptions(caps: Capabilities): (Option<VideoEncodeCodec> & { caption: string })[] {
-  return CODECS.map((value) => ({
+  return VIDEO_ENCODE_CODECS.map((value) => ({
     value,
     label: CODEC_LABELS[value],
     disabled: !caps.encodeVideo[value],
@@ -111,7 +111,7 @@ export function effectiveCompress(info: MediaInfo, settings: CompressSettings, c
   const frameRate = usable(frameRateOptions(info), settings.frameRate, 'original')
   const codec = caps.encodeVideo[settings.codec]
     ? settings.codec
-    : (CODECS.find((c) => caps.encodeVideo[c]) ?? settings.codec)
+    : (VIDEO_ENCODE_CODECS.find((c) => caps.encodeVideo[c]) ?? settings.codec)
   return { ...settings, resolution, frameRate, codec }
 }
 
@@ -145,9 +145,7 @@ export function planCompress(
   const containerName = CONTAINER_NAMES[container]
   const hints: string[] = []
   const unnamed = (t: Track) => {
-    hints.push(
-      `Moviola can’t tell which codec ${t.kind === 'audio' ? 'an audio' : `a ${t.kind}`} track uses, so it’s left out.`,
-    )
+    hints.push(unnamedCodecHint(t))
     return false
   }
 

@@ -1,4 +1,4 @@
-import type { MediaCodec } from 'mediabunny'
+import { VIDEO_ENCODE_CODECS } from '../capabilities'
 import { destination, type ContainerCodecs } from '../containers'
 import { codecName, CONTAINER_NAMES, hasVideo, languageName, type MediaInfo, type Track } from '../info'
 import { outputName } from '../names'
@@ -35,9 +35,6 @@ export function containerTracks(info: MediaInfo, container: ContainerChoice, cod
 export const subtitleNote = (info: MediaInfo) =>
   info.container === 'mkv' ? 'Subtitles other than WebVTT aren’t carried over.' : null
 
-// The video codecs Compress can convert to, for the way out of a container that can't hold the video.
-const COMPRESS_CODECS: MediaCodec[] = ['avc', 'hevc', 'vp9', 'av1']
-
 const orList = (words: string[]) =>
   words.length > 1 ? `${words.slice(0, -1).join(', ')} or ${words.at(-1)}` : (words[0] ?? '')
 
@@ -59,7 +56,7 @@ export function planChangeContainer(
   if (video.reason) {
     if (!video.track.codec)
       return { problems: ['Moviola can’t tell which codec this video uses, so it can’t copy it.'] }
-    const to = orList(COMPRESS_CODECS.filter((c) => codecs[container].includes(c)).map((c) => codecName(c, null)))
+    const to = orList(VIDEO_ENCODE_CODECS.filter((c) => codecs[container].includes(c)).map((c) => codecName(c, null)))
     const way = to ? ` Use Compress to convert it to ${to}.` : ''
     return { problems: [`${into} can’t hold this video’s ${codecName(video.track.codec, null)}.${way}`] }
   }

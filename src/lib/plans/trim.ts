@@ -1,6 +1,6 @@
-import type { Capabilities, VideoEncodeCodec } from '../capabilities'
+import { VIDEO_ENCODE_CODECS, type Capabilities, type VideoEncodeCodec } from '../capabilities'
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
-import { codecName, hasAudio, videoTrack, type MediaInfo, type Track } from '../info'
+import { codecName, hasAudio, unnamedCodecHint, videoTrack, type MediaInfo, type Track } from '../info'
 import { extensionOf, outputName, usableExtension } from '../names'
 import type { Plan, Planned } from '../plan'
 import { formatTimecode, frameDuration } from '../timecode'
@@ -13,12 +13,10 @@ export type TrimMode = 'fast' | 'precise'
 /** The whole file, Trim's range until the user picks one. */
 export const wholeFile = (info: MediaInfo): TimeRange => ({ start: 0, end: info.duration })
 
-const ENCODABLE: readonly string[] = ['avc', 'hevc', 'vp9', 'av1'] satisfies VideoEncodeCodec[]
-
 /** The codec Precise re-encodes to: the source's when the browser can encode it, else H.264. */
 function preciseCodec(codec: string | null, caps: Capabilities): VideoEncodeCodec | null {
-  if (codec && ENCODABLE.includes(codec) && caps.encodeVideo[codec as VideoEncodeCodec])
-    return codec as VideoEncodeCodec
+  const same = VIDEO_ENCODE_CODECS.find((c) => c === codec)
+  if (same && caps.encodeVideo[same]) return same
   return caps.encodeVideo.avc ? 'avc' : null
 }
 
@@ -65,7 +63,7 @@ export function planTrim(
   const known = info.tracks.filter((t) => t.codec)
   const unknown = info.tracks.filter((t) => !t.codec)
   if (!known.length) return { problems: ['Moviola can’t tell which codecs this file uses, so it can’t cut it.'] }
-  const hints = unknown.map((t) => `Moviola can’t tell which codec ${article(t)} track uses, so it’s left out.`)
+  const hints = unknown.map(unnamedCodecHint)
 
   const codec = precise ? preciseCodec(video.codec, caps)! : null
   const codecOf = (t: Track) => (t.kind === 'video' && codec ? codec : t.codec!)
@@ -97,5 +95,3 @@ export function planTrim(
     : 'Every track copied as is. No quality is lost.'
   return { plan, caption, ...(hints.length && { hints }) }
 }
-
-const article = (t: Track) => (t.kind === 'audio' ? 'an audio' : `a ${t.kind}`)

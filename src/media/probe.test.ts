@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { AudioTrack, MediaInfo, VideoTrack } from '@/lib/info'
-import { CANT_OPEN, probe } from './probe'
+import { FILE_TYPES } from '@/lib/file-types'
+import type { AudioTrack, Container, MediaInfo, VideoTrack } from '@/lib/info'
+import { CANT_OPEN, FORMATS, probe } from './probe'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -167,5 +168,31 @@ describe('probe', () => {
   it('refuses a file that isn’t media with the sentence the user sees', async () => {
     await expect(probe(fixture('notvideo.txt'))).rejects.toThrow(CANT_OPEN)
     expect(CANT_OPEN).toBe('Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.')
+  })
+})
+
+describe('what Moviola offers to open', () => {
+  // The container each extension holds; a new extension must be added here, and read.
+  const HOLDS: Record<string, Container> = {
+    '.mp4': 'mp4',
+    '.m4v': 'mp4',
+    '.m4a': 'mp4',
+    '.mov': 'mov',
+    '.mkv': 'mkv',
+    '.webm': 'webm',
+    '.ts': 'mpegts',
+    '.m2ts': 'mpegts',
+    '.mts': 'mpegts',
+    '.mp3': 'mp3',
+    '.wav': 'wav',
+    '.flac': 'flac',
+    '.ogg': 'ogg',
+    '.opus': 'ogg',
+    '.aac': 'adts',
+  }
+
+  it.each(Object.values(FILE_TYPES).flat())('reads %s', (extension) => {
+    expect(HOLDS[extension]).toBeDefined()
+    expect([...FORMATS.values()]).toContain(HOLDS[extension])
   })
 })

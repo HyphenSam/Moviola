@@ -1,4 +1,4 @@
-import { ALL_FORMATS, BlobSource, CanvasSink, Input, type WrappedCanvas } from 'mediabunny'
+import { BlobSource, CanvasSink, Input, type WrappedCanvas } from 'mediabunny'
 import { decodeAsPlayed } from './colour'
 import { firstTimestamp, FORMATS } from './probe'
 
@@ -24,7 +24,7 @@ export type OpenFrames = (file: File, box: { width: number; height: number }) =>
 /** Opens a file for frames on the page. Decoding is WebCodecs, off the main thread, so drawing a
  * frame doesn't hold up the UI. The file is read lazily, as for probing. */
 export const openFrames: OpenFrames = (file, box) => {
-  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
+  const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
   // Pool a few canvases: each frame is drawn onto the stage's own canvas straight away.
   const ready = input.getPrimaryVideoTrack().then(async (track) => {
     if (!track || !(await track.canDecode())) return null

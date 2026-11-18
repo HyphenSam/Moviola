@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { App } from './App'
+import { CANT_OPEN as PROBE_CANT_OPEN } from './media/probe'
 import type { MediaInfo } from './lib/info'
 import { deferred, fakeAudioInfo, fakeClient, fakeFrames, fakeInfo, fakeVideoTrack } from './lib/testing'
 
@@ -50,6 +51,16 @@ describe('App', () => {
     setup()
     expect(tools().map((t) => t.textContent)).toEqual(TOOLS)
     for (const t of tools()) expect(t).toBeDisabled()
+  })
+
+  it('names the same video formats on the stage as when a file can’t be opened', () => {
+    setup()
+    // "A, B, C and D video" or "A, B, C or D video": the names in it.
+    const names = (text: string) =>
+      text.match(/((?:[\w-]+, )*[\w-]+ (?:and|or) [\w-]+) video/)?.[1].split(/, | and | or /)
+    const invite = screen.getByText(/paste from the clipboard/i).textContent!
+    expect(names(invite)).toEqual(names(PROBE_CANT_OPEN))
+    expect(names(invite)).toContain('MP4')
   })
 
   it('invites a video on the stage and says nothing is uploaded', () => {

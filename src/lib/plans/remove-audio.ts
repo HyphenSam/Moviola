@@ -1,5 +1,5 @@
 import { destination, type ContainerCodecs, type OutputContainer } from '../containers'
-import { hasAudio, videoTrack, type MediaInfo, type Track } from '../info'
+import { hasAudio, unnamedCodecHint, videoTrack, type MediaInfo } from '../info'
 import { extensionOf, outputName, usableExtension } from '../names'
 import type { Plan, Planned } from '../plan'
 
@@ -19,9 +19,7 @@ export function planRemoveAudio(info: MediaInfo, keepAudio: readonly number[], c
   const wanted = info.tracks.filter((t) => t.kind !== 'audio' || keepAudio.includes(t.id))
   // A track whose codec Mediabunny can't name can't be copied; the rest still can.
   const kept = wanted.filter((t) => t.codec)
-  const hints = wanted
-    .filter((t) => !t.codec)
-    .map((t) => `Moviola can’t tell which codec ${article(t)} track uses, so it’s left out.`)
+  const hints = wanted.filter((t) => !t.codec).map(unnamedCodecHint)
 
   // The source's own container when it holds what's kept, else MKV, as Trim does.
   const holdsAll = (c: OutputContainer) => kept.every((t) => codecs[c].includes(t.codec!))
@@ -45,5 +43,3 @@ export function planRemoveAudio(info: MediaInfo, keepAudio: readonly number[], c
     : 'Video copied as is, without its audio. No quality is lost.'
   return { plan, caption, ...(hints.length && { hints }) }
 }
-
-const article = (t: Track) => (t.kind === 'audio' ? 'an audio' : `a ${t.kind}`)

@@ -162,6 +162,10 @@ export function codecName(codec: MediaCodec | null, codecString: string | null):
   return p ? `${CODEC_NAMES[codec]} ${p}` : CODEC_NAMES[codec]
 }
 
+/** The hint for a track left out of a copy because Mediabunny can't name its codec. */
+export const unnamedCodecHint = (track: Track) =>
+  `Moviola can’t tell which codec ${track.kind === 'audio' ? 'an audio' : `a ${track.kind}`} track uses, so it’s left out.`
+
 /** PQ (HDR10, Dolby Vision) and HLG are the HDR transfer functions; everything else is SDR. */
 export const isHdrTransfer = (transfer: string | undefined) => transfer === 'pq' || transfer === 'hlg'
 
