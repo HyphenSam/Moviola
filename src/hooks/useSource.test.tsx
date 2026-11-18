@@ -51,6 +51,21 @@ describe('useSource', () => {
     expect(result.current.error).toBeNull()
   })
 
+  it('clears an earlier error as soon as the next file starts opening', async () => {
+    const slow = deferred<ReturnType<typeof fakeInfo>>()
+    const client = fakeClient((f) => {
+      if (f.name.endsWith('.txt')) throw new Error('No.')
+      return slow.promise
+    })
+    const { result } = renderHook(() => useSource(client))
+    act(() => result.current.open(file('notes.txt')))
+    await waitFor(() => expect(result.current.error).toBe('No.'))
+
+    act(() => result.current.open(file('b.mp4')))
+    expect(result.current.opening?.name).toBe('b.mp4')
+    expect(result.current.error).toBeNull()
+  })
+
   it('ignores a slow probe that a newer file has overtaken', async () => {
     const slow = deferred<ReturnType<typeof fakeInfo>>()
     const client = fakeClient((f) => (f.name === 'slow.mp4' ? slow.promise : fakeInfo({ name: f.name })))

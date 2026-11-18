@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gripLefts, moveEnd, thumbnailCount, thumbnailTimes, timeAt } from './timeline'
+import { gripLefts, moveEnd, thumbnailCount, thumbnailTimes, timeAt, withinFile } from './timeline'
 
 describe('timeAt', () => {
   it('turns a position along the strip into a time', () => {
@@ -72,5 +72,19 @@ describe('gripLefts', () => {
   it('keeps both grips on the strip, side by side, at either end of the file', () => {
     expect(gripLefts({ start: 0, end: 0.1 }, 80, 400, 12)).toEqual({ start: 0, end: 12 })
     expect(gripLefts({ start: 79.9, end: 80 }, 80, 400, 12)).toEqual({ start: 376, end: 388 })
+  })
+})
+
+describe('withinFile', () => {
+  it('keeps both points within the file', () => {
+    expect(withinFile({ start: -2, end: 95 }, 80)).toEqual({ start: 0, end: 80 })
+    expect(withinFile({ start: 90, end: 120 }, 80)).toEqual({ start: 80, end: 80 })
+    expect(withinFile({ start: 3, end: 12 }, 80)).toEqual({ start: 3, end: 12 })
+  })
+
+  // SPEC.md 6.3 lists "out not after in" as the planner's problem, so a mark past the other point
+  // doesn't push it along.
+  it('leaves points that cross for the planner to report', () => {
+    expect(withinFile({ start: 30, end: 10 }, 80)).toEqual({ start: 30, end: 10 })
   })
 })

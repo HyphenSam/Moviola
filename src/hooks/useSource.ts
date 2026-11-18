@@ -17,12 +17,13 @@ export function useSource(client: WorkerClient) {
   const open = useCallback(
     (file: File) => {
       const ticket = ++latest.current
+      // The last file's error is old news once another is opening; they'd read as one story.
+      setError(null)
       setOpening(file)
       client.probe(file).then(
         (info) => {
           if (ticket !== latest.current) return
           setSource({ id: ticket, file, info })
-          setError(null)
           setOpening(null)
         },
         (e: unknown) => {

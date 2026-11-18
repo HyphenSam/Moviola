@@ -1,6 +1,6 @@
 import { Download, X } from 'lucide-react'
 import { Tooltip } from 'radix-ui'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { AppLauncher } from './components/AppLauncher'
 import { ChangeContainerView } from './components/ChangeContainerView'
@@ -25,7 +25,8 @@ import { useInstallPrompt } from './hooks/useInstallPrompt'
 import { canSaveToDisk, useJob } from './hooks/useJob'
 import { useKeyframe } from './hooks/useKeyframe'
 import { usePlayer } from './hooks/usePlayer'
-import { useSource } from './hooks/useSource'
+import { usePerSource } from './hooks/usePerSource'
+import { useSource, type Source } from './hooks/useSource'
 import { defaultTargetMB } from './lib/bitrate'
 import { APP_NAME } from './lib/brand'
 import { dependsOnEncoders, EVERY_ENCODER, type Capabilities } from './lib/capabilities'
@@ -61,18 +62,31 @@ import { planRemoveAudio } from './lib/plans/remove-audio'
 import { keyframeNote, planTrim, preciseProblem, wholeFile, type TimeRange, type TrimMode } from './lib/plans/trim'
 import { WORKER_STOPPED, type WorkerCapabilities, type WorkerClient } from './lib/protocol'
 import { hasAudio, hasVideo, videoTrack, type MediaInfo } from './lib/info'
+import { withinFile } from './lib/timeline'
 import { defaultTool, toolStates, type ToolId } from './lib/tools'
 import type { OpenFrames } from './media/frames'
 import { CONTAINER_CODECS } from './media/formats'
 
-/** Track ids chosen for one file; another file starts with none. */
-type PerFile = { sourceId: number; ids: number[] } | null
-const idsFor = (chosen: PerFile, sourceId: number | undefined) =>
-  chosen && chosen.sourceId === sourceId ? chosen.ids : []
+/** Track ids with `id` added or taken out. */
+const toggled = (ids: number[], id: number, on: boolean) => (on ? [...ids, id] : ids.filter((i) => i !== id))
+
+/** What one tool puts on the page: its settings, the range the timeline shows (Trim and Make animation's),
+ * and its action, if it has one. */
+type ToolSetup = {
+  view: ReactNode
+  range: TimeRange | null
+  action: {
+    /** The plan in a browser with `caps`; `atSize` is what it can encode at Compress's size. */
+    plan: (caps: Capabilities, atSize: Capabilities['encodeVideo']) => Planned<JobPlan>
+    verb: string
+    doing: string
+    /** The result can be as large as the file, so memory matters when it can't be streamed to disk. */
+    large: boolean
+  } | null
+}
 
 /** A range tool's range before the user picks one: Make animation's first five seconds, else the whole file. */
-const unpicked = (info: MediaInfo, tool: ToolId | null) =>
-  tool === 'animation' ? animationRange(info) : wholeFile(info)
+const unpicked = (info: MediaInfo, tool: ToolId) => (tool === 'animation' ? animationRange(info) : wholeFile(info))
 
 /** What the worker said this browser can encode, if it has yet (SPEC.md section 9). */
 type EncoderState =
@@ -92,24 +106,24 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   const { source, opening, error, open: openSource, cancelOpening, dismissError } = useSource(client)
   const job = useJob(client)
   // The chosen tool belongs to one file; a newly opened file starts on its default tool.
-  const [choice, setChoice] = useState<{ sourceId: number; tool: ToolId } | null>(null)
+  const [chosenTool, chooseTool] = usePerSource<ToolId>(source)
   // So does Extract audio's track; its format and options carry over to the next file.
-  const [track, setTrack] = useState<{ sourceId: number; id: number } | null>(null)
+  const [chosenTrack, chooseTrack] = usePerSource<number>(source)
   const [audioSettings, setAudioSettings] = useState(DEFAULT_EXTRACT_AUDIO)
   // The range belongs to one file and is shared by the tools that use one (Trim and Make animation);
   // until the user picks one, Trim's is the whole file and Make animation's the first five seconds.
   // Trim's mode carries over to the next file.
-  const [ranged, setRanged] = useState<{ sourceId: number; range: TimeRange } | null>(null)
+  const [pickedRange, pickRange] = usePerSource<TimeRange>(source)
   const [trimMode, setTrimMode] = useState<TrimMode>('fast')
   // Change container's choice carries over to the next file; the tracks unticked there, and the audio
   // tracks Remove audio keeps, belong to one file.
   const [rewrapTo, setRewrapTo] = useState<ContainerChoice | null>(null)
-  const [dropped, setDropped] = useState<PerFile>(null)
-  const [keptAudio, setKeptAudio] = useState<PerFile>(null)
+  const [dropped = [], setDropped] = usePerSource<number[]>(source)
+  const [keptAudio = [], setKeptAudio] = usePerSource<number[]>(source)
   // Compress's settings carry over to the next file, apart from the target size, which starts at half
   // of each file.
   const [compressSettings, setCompressSettings] = useState(DEFAULT_COMPRESS)
-  const [target, setTarget] = useState<{ sourceId: number; mb: number } | null>(null)
+  const [targetMB, setTargetMB] = usePerSource<number>(source)
   // Grab frame's and Make animation's settings carry over to the next file.
   const [frameSettings, setFrameSettings] = useState(DEFAULT_FRAME)
   const [animationSettings, setAnimationSettings] = useState(DEFAULT_ANIMATION)
@@ -154,23 +168,48 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // The playhead, shared by the player, the timeline and the tools that set times from it.
   const player = usePlayer(source?.id ?? null, source?.info.duration ?? 0, video?.frameRate ?? null)
   const tools = toolStates(source?.info ?? null)
-  const tool = source ? (choice?.sourceId === source.id ? choice.tool : defaultTool(source.info)) : null
-  const toolName = tools.find((t) => t.id === tool)?.label
 
-  const range = source ? (ranged?.sourceId === source.id ? ranged.range : unpicked(source.info, tool)) : null
-  const updateRange = useCallback(
-    (change: (range: TimeRange) => TimeRange) =>
-      source &&
-      setRanged((r) => ({
-        sourceId: source.id,
-        range: change(r?.sourceId === source.id ? r.range : unpicked(source.info, tool)),
-      })),
-    [source, tool],
+  /** The open file with what its tools are set to: the user's choices for it, else each one's default. */
+  const settingsFor = (source: Source) => {
+    const { info } = source
+    const tool = chosenTool ?? defaultTool(info)
+    const trackId = chosenTrack ?? defaultAudioTrack(info)?.id ?? 0
+    const problems = formatProblems(info, trackId, capabilities)
+    // Precise needs encoders this browser may not have; until it can, Fast is in effect.
+    const precise = preciseProblem(info, capabilities)
+    const mode: TrimMode = precise ? 'fast' : trimMode
+    return {
+      source,
+      info,
+      tool,
+      range: pickedRange ?? unpicked(info, tool),
+      problems,
+      // A format this track can't be converted to (or one that's waiting on the worker) falls back to
+      // Original rather than showing a disabled choice as chosen.
+      extract: {
+        ...audioSettings,
+        trackId,
+        format: problems[audioSettings.format] ? 'original' : audioSettings.format,
+      } as const,
+      precise,
+      mode,
+      // The source's own container can't be chosen; a choice carried over from a file in it falls back.
+      rewrap: rewrapTo && rewrapTo !== info.container ? rewrapTo : defaultContainer(info),
+      compress: { ...compressSettings, targetMB: targetMB ?? defaultTargetMB(info.size) },
+      animation: { ...animationSettings, width: animationWidth(info, animationSettings.width) },
+    }
+  }
+  const file = source && settingsFor(source)
+  const toolName = tools.find((t) => t.id === file?.tool)?.label
+
+  // Every write to the range (the timeline's handles, the typed points, "Set to playhead", I and O)
+  // comes through here, which keeps it within the file.
+  const setRange = useCallback(
+    (range: TimeRange) => source && pickRange(withinFile(range, source.info.duration)),
+    [source, pickRange],
   )
-  const onMark = useCallback(
-    (end: 'in' | 'out', time: number) => updateRange((r) => ({ ...r, [end === 'in' ? 'start' : 'end']: time })),
-    [updateRange],
-  )
+  const onMark = (end: 'in' | 'out', time: number) =>
+    file && setRange({ ...file.range, [end === 'in' ? 'start' : 'end']: time })
 
   // Opening another file while a job runs would leave the job writing for a file that's gone. A job
   // whose save dialog is still open counts; one already told to stop needs no second asking. The
@@ -189,51 +228,24 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     [phase, cancel, openSource],
   )
 
-  const trackId =
-    source && track?.sourceId === source.id ? track.id : ((source && defaultAudioTrack(source.info)?.id) ?? 0)
-  const problems = source ? formatProblems(source.info, trackId, capabilities) : null
-  // A format this track can't be converted to (or one that's waiting on the worker) falls back to
-  // Original rather than showing a disabled choice as chosen.
-  const extractSettings = {
-    ...audioSettings,
-    trackId,
-    format: problems?.[audioSettings.format] ? 'original' : audioSettings.format,
-  } as const
-  // Precise needs encoders this browser may not have; until it can, Fast is in effect.
-  const precise = source ? preciseProblem(source.info, capabilities) : null
-  const mode: TrimMode = precise ? 'fast' : trimMode
-  const fastVideo = !!source && !!video && tool === 'trim' && mode === 'fast'
-  const keyframe = useKeyframe(client, fastVideo ? source.file : null, video?.id ?? null, range?.start ?? 0)
-  const note = fastVideo && range ? keyframeNote(range.start, keyframe, video.frameRate) : null
-
-  // The source's own container can't be chosen; a choice carried over from a file in it falls back.
-  const rewrap =
-    source && rewrapTo && rewrapTo !== source.info.container ? rewrapTo : source && defaultContainer(source.info)
-  const droppedIds = idsFor(dropped, source?.id)
-  const keptAudioIds = idsFor(keptAudio, source?.id)
-  const toggle = (set: typeof setDropped, ids: number[], id: number, on: boolean) =>
-    source && set({ sourceId: source.id, ids: on ? [...ids, id] : ids.filter((i) => i !== id) })
+  const fastVideo = !!file && !!video && file.tool === 'trim' && file.mode === 'fast'
+  const keyframe = useKeyframe(client, fastVideo ? file.source.file : null, video?.id ?? null, file?.range.start ?? 0)
+  const note = fastVideo ? keyframeNote(file.range.start, keyframe, video.frameRate) : null
 
   // Compress asks the encoders again at the size it will write (SPEC.md section 9), and can't start
   // until the worker has answered for that size. If the question fails, the 1080p answer stands in
   // and the next change of settings asks again.
-  const compressing = !!source && tool === 'compress'
-  const targetMB = source ? (target?.sourceId === source.id ? target.mb : defaultTargetMB(source.info.size)) : 0
-  const chosenCompress = { ...compressSettings, targetMB }
+  const compressing = file?.tool === 'compress'
   const compressSize =
-    compressing && video
-      ? outputSize(source.info, effectiveCompress(source.info, chosenCompress, capabilities).resolution)
+    file && compressing && video
+      ? outputSize(file.info, effectiveCompress(file.info, file.compress, capabilities).resolution)
       : null
   const encodableHere = useEncodable(client, compressSize, compressSettings)
   const compressCaps: Capabilities = {
     ...capabilities,
     encodeVideo: encodableHere.encoders ?? capabilities.encodeVideo,
   }
-  const compressNow = source ? effectiveCompress(source.info, chosenCompress, compressCaps) : null
 
-  const animation = source
-    ? { ...animationSettings, width: animationWidth(source.info, animationSettings.width) }
-    : null
   // Copying needs images on the clipboard, which takes PNG only.
   const canCopy = typeof window.ClipboardItem !== 'undefined' && !!navigator.clipboard?.write
   const copyFrame = () => {
@@ -256,25 +268,176 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     )
   }
 
+  /** Everything that differs by tool, in one switch: a tool without a case doesn't compile. */
+  const setupFor = (file: ReturnType<typeof settingsFor>): ToolSetup => {
+    const { info } = file
+    switch (file.tool) {
+      case 'info':
+        return { view: <MediaInfoView info={info} />, range: null, action: null }
+      case 'extract-audio': {
+        // An audio file is converted, not extracted from (SPEC.md section 6).
+        const converting = !hasVideo(info)
+        return {
+          view: (
+            <ExtractAudioView
+              info={info}
+              settings={file.extract}
+              problems={file.problems}
+              onChange={({ trackId: id, ...change }) => {
+                if (id != null) chooseTrack(id)
+                setAudioSettings((s) => ({ ...s, ...change }))
+              }}
+            />
+          ),
+          range: null,
+          action: {
+            plan: (caps) => planExtractAudio(info, file.extract, CONTAINER_CODECS, caps),
+            verb: converting ? 'Convert' : 'Extract',
+            doing: converting ? 'Converting' : 'Extracting',
+            large: true,
+          },
+        }
+      }
+      case 'trim':
+        return {
+          view: (
+            <TrimView
+              duration={info.duration}
+              range={file.range}
+              playhead={player.time}
+              video={!!video}
+              mode={file.mode}
+              preciseProblem={file.precise}
+              keyframeNote={note}
+              onRange={setRange}
+              onSeek={player.seek}
+              onMode={setTrimMode}
+            />
+          ),
+          range: file.range,
+          action: {
+            plan: (caps) => planTrim(info, file.range, file.mode, CONTAINER_CODECS, caps),
+            verb: 'Trim',
+            doing: 'Trimming',
+            large: true,
+          },
+        }
+      case 'container':
+        return {
+          view: (
+            <ChangeContainerView
+              info={info}
+              container={file.rewrap}
+              tracks={containerTracks(info, file.rewrap, CONTAINER_CODECS)}
+              dropped={dropped}
+              note={subtitleNote(info)}
+              onContainer={setRewrapTo}
+              onTrack={(id, keep) => setDropped(toggled(dropped, id, !keep))}
+            />
+          ),
+          range: null,
+          action: {
+            plan: () => planChangeContainer(info, file.rewrap, dropped, CONTAINER_CODECS),
+            verb: 'Rewrap',
+            doing: 'Rewrapping',
+            large: true,
+          },
+        }
+      case 'remove-audio':
+        return {
+          view: (
+            <RemoveAudioView
+              info={info}
+              keep={keptAudio}
+              onKeep={(id, keep) => setKeptAudio(toggled(keptAudio, id, keep))}
+            />
+          ),
+          range: null,
+          action: {
+            plan: () => planRemoveAudio(info, keptAudio, CONTAINER_CODECS),
+            verb: 'Remove audio',
+            doing: 'Removing audio',
+            large: true,
+          },
+        }
+      case 'compress':
+        return {
+          view: (
+            <CompressView
+              settings={effectiveCompress(info, file.compress, compressCaps)}
+              resolutions={resolutionOptions(info)}
+              frameRates={frameRateOptions(info)}
+              codecs={codecOptions(compressCaps)}
+              hasAudio={hasAudio(info)}
+              onChange={({ targetMB: mb, ...change }) => {
+                if (mb != null) setTargetMB(mb)
+                setCompressSettings((s) => ({ ...s, ...change }))
+              }}
+            />
+          ),
+          range: null,
+          action: {
+            plan: (caps, atSize) =>
+              planCompress(info, file.compress, CONTAINER_CODECS, { ...caps, encodeVideo: atSize }),
+            verb: 'Compress',
+            doing: 'Compressing',
+            large: true,
+          },
+        }
+      case 'frame':
+        return {
+          view: (
+            <GrabFrameView
+              duration={info.duration}
+              playhead={player.time}
+              settings={frameSettings}
+              webp={capabilities.encodeWebp}
+              copyNote={copyNote}
+              onStep={player.step}
+              onChange={(change) => setFrameSettings((s) => ({ ...s, ...change }))}
+            />
+          ),
+          range: null,
+          action: {
+            plan: (caps) => planGrabFrame(info, player.time, frameSettings, caps),
+            verb: 'Save frame',
+            doing: 'Saving frame',
+            large: false,
+          },
+        }
+      case 'animation': {
+        const gif = file.animation.format === 'gif'
+        return {
+          view: (
+            <AnimationView
+              duration={info.duration}
+              range={file.range}
+              playhead={player.time}
+              settings={file.animation}
+              widths={widthOptions(info)}
+              webp={capabilities.encodeWebp}
+              onRange={setRange}
+              onSeek={player.seek}
+              onChange={(change) => setAnimationSettings((s) => ({ ...s, ...change }))}
+            />
+          ),
+          range: file.range,
+          action: {
+            plan: (caps) => planAnimation(info, file.range, file.animation, caps),
+            verb: gif ? 'Make GIF' : 'Make WebP',
+            doing: gif ? 'Making GIF' : 'Making WebP',
+            large: false,
+          },
+        }
+      }
+    }
+  }
+  const setup = file && setupFor(file)
+  const action = setup?.action ?? null
+
   /** The chosen tool's plan in a browser with `caps`; `atSize` is what it can encode at Compress's size. */
   const planWith = (caps: Capabilities, atSize = caps.encodeVideo): Planned<JobPlan> | null =>
-    !source
-      ? null
-      : tool === 'extract-audio'
-        ? planExtractAudio(source.info, extractSettings, CONTAINER_CODECS, caps)
-        : tool === 'trim'
-          ? planTrim(source.info, range!, mode, CONTAINER_CODECS, caps)
-          : tool === 'container'
-            ? planChangeContainer(source.info, rewrap!, droppedIds, CONTAINER_CODECS)
-            : tool === 'remove-audio'
-              ? planRemoveAudio(source.info, keptAudioIds, CONTAINER_CODECS)
-              : tool === 'compress'
-                ? planCompress(source.info, chosenCompress, CONTAINER_CODECS, { ...caps, encodeVideo: atSize })
-                : tool === 'frame'
-                  ? planGrabFrame(source.info, player.time, frameSettings, caps)
-                  : tool === 'animation'
-                    ? planAnimation(source.info, range!, animation!, caps)
-                    : null
+    action?.plan(caps, atSize) ?? null
   // Without the worker's answer, a plan that would differ between a browser with every encoder and one
   // with none can't be shown either way; one that wouldn't (a copy, or a problem with the file) can.
   const undecided = encoders.state !== 'known' && dependsOnEncoders((e) => planWith({ saveToDisk, ...e }))
@@ -290,37 +453,17 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
       : encoders.message === WORKER_STOPPED
         ? WORKER_STOPPED
         : 'Moviola couldn’t check what this browser can encode.'
-  // An audio file is converted, not extracted from (SPEC.md section 6).
-  const converting = !!source && !hasVideo(source.info)
-  const [verb, doing] =
-    tool === 'trim'
-      ? ['Trim', 'Trimming']
-      : tool === 'container'
-        ? ['Rewrap', 'Rewrapping']
-        : tool === 'remove-audio'
-          ? ['Remove audio', 'Removing audio']
-          : tool === 'compress'
-            ? ['Compress', 'Compressing']
-            : tool === 'frame'
-              ? ['Save frame', 'Saving frame']
-              : tool === 'animation'
-                ? animation!.format === 'gif'
-                  ? ['Make GIF', 'Making GIF']
-                  : ['Make WebP', 'Making WebP']
-                : converting
-                  ? ['Convert', 'Converting']
-                  : ['Extract', 'Extracting']
   // A file still opening would replace the source under the job when its probe came back, so the job
   // takes precedence: the last thing asked for wins, as between two opens (SPEC.md section 3).
   const startJob = () => {
-    if (!source || !planned?.plan || !idle) return
+    if (!source || !action || !planned?.plan || !idle) return
     cancelOpening()
-    void job.start(source.file, planned.plan, doing)
+    void job.start(source.file, planned.plan, action.doing)
   }
   // The progress, or "Cancelling…", stands in for the action.
   const busy = phase === 'running' || phase === 'cancelling'
   const memoryHint =
-    source && tool !== 'frame' && tool !== 'animation' && source.info.size > 2_000_000_000 && !canSaveToDisk()
+    source && action?.large && source.info.size > 2_000_000_000 && !canSaveToDisk()
       ? 'The result is held in memory until you download it, so a long file needs plenty of free memory.'
       : null
 
@@ -398,12 +541,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
           aria-label="Tool rail"
           className="order-3 border-b border-line bg-panel lg:order-none lg:col-start-1 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-b-0"
         >
-          <ToolRail
-            tools={tools}
-            value={tool}
-            disabled={!source}
-            onChange={(t) => source && setChoice({ sourceId: source.id, tool: t })}
-          />
+          <ToolRail tools={tools} value={file?.tool ?? null} disabled={!source} onChange={chooseTool} />
         </nav>
 
         <aside className="order-4 flex min-h-0 flex-col bg-panel lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-2 lg:border-r lg:border-line">
@@ -419,87 +557,12 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             </div>
           )}
           <div className="flex flex-1 flex-col gap-7 overflow-y-auto px-5 py-6">
-            {source ? (
+            {setup ? (
               <section aria-labelledby="tool-heading" className="flex flex-col gap-4">
                 <h2 id="tool-heading" className="text-sm font-semibold">
                   {toolName}
                 </h2>
-                {tool === 'info' ? (
-                  <MediaInfoView info={source.info} />
-                ) : tool === 'extract-audio' ? (
-                  <ExtractAudioView
-                    info={source.info}
-                    settings={extractSettings}
-                    problems={problems!}
-                    onChange={({ trackId: id, ...change }) => {
-                      if (id != null) setTrack({ sourceId: source.id, id })
-                      setAudioSettings((s) => ({ ...s, ...change }))
-                    }}
-                  />
-                ) : tool === 'trim' ? (
-                  <TrimView
-                    duration={source.info.duration}
-                    range={range!}
-                    playhead={player.time}
-                    video={!!video}
-                    mode={mode}
-                    preciseProblem={precise}
-                    keyframeNote={note}
-                    onRange={(r) => updateRange(() => r)}
-                    onSeek={player.seek}
-                    onMode={setTrimMode}
-                  />
-                ) : tool === 'container' ? (
-                  <ChangeContainerView
-                    info={source.info}
-                    container={rewrap!}
-                    tracks={containerTracks(source.info, rewrap!, CONTAINER_CODECS)}
-                    dropped={droppedIds}
-                    note={subtitleNote(source.info)}
-                    onContainer={setRewrapTo}
-                    onTrack={(id, keep) => toggle(setDropped, droppedIds, id, !keep)}
-                  />
-                ) : tool === 'remove-audio' ? (
-                  <RemoveAudioView
-                    info={source.info}
-                    keep={keptAudioIds}
-                    onKeep={(id, keep) => toggle(setKeptAudio, keptAudioIds, id, keep)}
-                  />
-                ) : tool === 'compress' ? (
-                  <CompressView
-                    settings={compressNow!}
-                    resolutions={resolutionOptions(source.info)}
-                    frameRates={frameRateOptions(source.info)}
-                    codecs={codecOptions(compressCaps)}
-                    hasAudio={hasAudio(source.info)}
-                    onChange={({ targetMB: mb, ...change }) => {
-                      if (mb != null) setTarget({ sourceId: source.id, mb })
-                      setCompressSettings((s) => ({ ...s, ...change }))
-                    }}
-                  />
-                ) : tool === 'frame' ? (
-                  <GrabFrameView
-                    duration={source.info.duration}
-                    playhead={player.time}
-                    settings={frameSettings}
-                    webp={capabilities.encodeWebp}
-                    copyNote={copyNote}
-                    onStep={player.step}
-                    onChange={(change) => setFrameSettings((s) => ({ ...s, ...change }))}
-                  />
-                ) : tool === 'animation' ? (
-                  <AnimationView
-                    duration={source.info.duration}
-                    range={range!}
-                    playhead={player.time}
-                    settings={animation!}
-                    widths={widthOptions(source.info)}
-                    webp={capabilities.encodeWebp}
-                    onRange={(r) => updateRange(() => r)}
-                    onSeek={player.seek}
-                    onChange={(change) => setAnimationSettings((s) => ({ ...s, ...change }))}
-                  />
-                ) : null}
+                {setup.view}
               </section>
             ) : (
               <section>
@@ -518,12 +581,12 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             <div className="px-5 pb-4 lg:sticky lg:bottom-0 lg:border-t lg:border-line lg:bg-panel lg:pt-4">
               <JobAction
                 planned={planned}
-                verb={verb}
+                verb={action?.verb ?? ''}
                 state={job.state}
                 checking={checking}
                 hint={memoryHint}
                 secondary={
-                  tool === 'frame' &&
+                  file?.tool === 'frame' &&
                   canCopy &&
                   planned?.plan && (
                     <Button onClick={copyFrame} disabled={!idle}>
@@ -597,9 +660,9 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
             frames={frames}
             player={player}
             thumbnails={client.thumbnails}
-            range={tool === 'trim' || tool === 'animation' ? range : null}
+            range={setup?.range ?? null}
             cut={note ? keyframe : null}
-            onRange={(r) => updateRange(() => r)}
+            onRange={setRange}
             onMark={onMark}
             onBrowse={() => input.current?.click()}
           />

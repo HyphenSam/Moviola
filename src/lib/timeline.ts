@@ -16,6 +16,14 @@ export const thumbnailCount = (width: number, aspect: number, height: number) =>
 export const thumbnailTimes = (duration: number, count: number) =>
   Array.from({ length: count }, (_, i) => ((i + 0.5) * duration) / count)
 
+/** The range with both points kept within the file; every write to the range goes through this. Points
+ * that cross are left as they are, for the planner to report (SPEC.md 6.3), rather than one pushing the
+ * other along. */
+export function withinFile(range: TimeRange, duration: number): TimeRange {
+  const clamp = (t: number) => Math.min(Math.max(t, 0), duration)
+  return { start: clamp(range.start), end: clamp(range.end) }
+}
+
 /** The range with its in point (`start`) or out point (`end`) moved to `time`: on the frame showing
  * there, within the file, and at least a frame from the other point. The out point can also sit at the
  * very end, which needn't fall on the frame grid. */
