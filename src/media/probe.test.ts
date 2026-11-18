@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { Input } from 'mediabunny'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FILE_TYPES } from '@/lib/file-types'
 import type { AudioTrack, Container, MediaInfo, VideoTrack } from '@/lib/info'
 import { CANT_OPEN, FORMATS, probe } from './probe'
@@ -14,6 +15,8 @@ const video = (info: MediaInfo) => info.tracks.filter((t): t is VideoTrack => t.
 const audio = (info: MediaInfo) => info.tracks.filter((t): t is AudioTrack => t.kind === 'audio')
 
 describe('probe', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('reads an MP4 with H.264 and AAC', async () => {
     const info = await probe(fixture('h264-aac.mp4'))
     expect(info).toMatchObject({ name: 'h264-aac.mp4', container: 'mp4', duration: 4, tags: {} })
@@ -88,6 +91,14 @@ describe('probe', () => {
     const info = await probe(fixture(name))
     expect(info.start).toBeCloseTo(start, 3)
     expect(info.duration).toBeCloseTo(duration, 3)
+  })
+
+  it('never gives a negative length, even when the end reads as before the start', async () => {
+    // A late file (10 s in) whose end timestamp comes back as 0, as a broken index can make it.
+    vi.spyOn(Input.prototype, 'computeDuration').mockResolvedValue(0)
+    const info = await probe(fixture('h264-aac-late.mkv'))
+    expect(info.start).toBeGreaterThan(9)
+    expect(info.duration).toBe(0)
   })
 
   it('starts other files at zero', async () => {

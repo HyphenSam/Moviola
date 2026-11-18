@@ -62,7 +62,7 @@ export function Stage({
             duration={source.info.duration}
             time={player.time}
             frameRate={video?.frameRate ?? null}
-            aspect={video ? video.width / video.height : null}
+            aspect={video?.height ? video.width / video.height : null}
             thumbnails={thumbnails}
             onSeek={player.seek}
             range={range}

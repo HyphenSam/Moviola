@@ -61,8 +61,9 @@ export async function probe(file: File): Promise<MediaInfo> {
       container: FORMATS.get(format)!,
       mimeType,
       start,
-      // computeDuration is the end timestamp; the length runs from the first one.
-      duration: end - start,
+      // computeDuration is the end timestamp; the length runs from the first one. A broken index can put
+      // the end before it, and nothing downstream expects a negative length.
+      duration: Math.max(0, end - start),
       tags: plainTags(tags),
       tracks: tracks.filter((t) => t !== null),
     }
