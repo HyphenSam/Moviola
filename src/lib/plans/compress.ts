@@ -185,6 +185,8 @@ export function planCompress(
   const subtitles = info.tracks.filter((t) => t.kind === 'subtitle' && (!!t.codec || unnamed(t)))
   const keptSubtitles = subtitles.filter((t) => codecs[container].includes(t.codec!))
   if (keptSubtitles.length < subtitles.length) hints.push('Subtitles aren’t carried over.')
+  // Compress re-encodes one video track; any others (another angle, a cover picture) are left out.
+  if (info.tracks.filter((t) => t.kind === 'video').length > 1) hints.push('Only the first video track is kept.')
 
   const frameRate = cappedFrameRate(
     video.frameRate,

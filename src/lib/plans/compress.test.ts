@@ -379,6 +379,17 @@ describe('other tracks and problems', () => {
     }
   })
 
+  it('keeps only the first video track, and says so', () => {
+    const info = fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack(), fakeVideoTrack({ id: 3 })] })
+    const result = plan(info)
+    expect(result.plan?.keep).toEqual([1, 2])
+    expect(result.hints).toContain('Only the first video track is kept.')
+  })
+
+  it('says nothing of other video tracks when there are none', () => {
+    expect(plan().hints ?? []).not.toContain('Only the first video track is kept.')
+  })
+
   it('leaves out tracks whose codec Mediabunny can’t name, and says so', () => {
     const info = fakeInfo({ tracks: [fakeVideoTrack(), fakeAudioTrack({ codec: null })] })
     const result = plan(info)
