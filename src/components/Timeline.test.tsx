@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TimeRange } from '@/lib/plans/trim'
+import { deferred } from '@/lib/testing'
 import { Timeline } from './Timeline'
 
 const file = new File(['x'], 'holiday.mp4')
@@ -132,5 +133,58 @@ describe('Timeline', () => {
     const { thumbnails } = setup()
     // 16:9 at 48 px high is 85⅓ px wide: five fill 400 px.
     await waitFor(() => expect(thumbnails).toHaveBeenCalledWith(file, [8, 24, 40, 56, 72], 48))
+  })
+})
+
+describe('Timeline thumbnails', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  const bitmap = () => ({ width: 160, height: 90, close: vi.fn() }) as unknown as ImageBitmap & { close: () => void }
+
+  /** A 16:9 strip 400 px wide, whose thumbnails come from `thumbnails`. */
+  function show(thumbnails: (file: File, times: number[]) => Promise<(ImageBitmap | null)[]>, of = file) {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(400)
+    const props = {
+      duration: 80,
+      time: 0,
+      frameRate: 25,
+      aspect: 16 / 9,
+      thumbnails: vi.fn(thumbnails),
+      onSeek: () => {},
+      range: null,
+      onRange: () => {},
+      cut: null,
+    }
+    const view = render(<Timeline file={of} {...props} />)
+    return { ...view, props }
+  }
+
+  it('frees the thumbnails when it goes', async () => {
+    const made = [bitmap(), bitmap()]
+    const { props, unmount } = show(async () => made)
+    await waitFor(() => expect(props.thumbnails).toHaveBeenCalled())
+    await act(async () => {})
+    for (const b of made) expect(b.close).not.toHaveBeenCalled()
+    unmount()
+    for (const b of made) expect(b.close).toHaveBeenCalled()
+  })
+
+  it('frees thumbnails that arrive after it has gone', async () => {
+    const reply = deferred<(ImageBitmap | null)[]>()
+    const { props, unmount } = show(() => reply.promise)
+    await waitFor(() => expect(props.thumbnails).toHaveBeenCalled())
+    unmount()
+    const made = [bitmap(), null]
+    await act(async () => reply.resolve(made))
+    expect(made[0]!.close).toHaveBeenCalled()
+  })
+
+  it('frees the old file’s thumbnails when the file changes', async () => {
+    const made = [bitmap()]
+    const { props, rerender } = show(async () => made)
+    await waitFor(() => expect(props.thumbnails).toHaveBeenCalled())
+    await act(async () => {})
+    rerender(<Timeline file={new File(['y'], 'beach.mp4')} {...props} />)
+    expect(made[0].close).toHaveBeenCalled()
   })
 })

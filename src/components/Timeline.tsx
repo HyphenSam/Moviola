@@ -202,12 +202,25 @@ function Thumbnails({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [images, setImages] = useState<(ImageBitmap | null)[]>([])
-  const cache = useRef(new Map<number, (ImageBitmap | null)[]>())
+  // The sets made for this file, by count; null once the file has changed or the strip has gone.
+  const cache = useRef<Map<number, (ImageBitmap | null)[]> | null>(null)
   const count = aspect ? thumbnailCount(width, aspect, HEIGHT) : 0
 
+  // Bitmaps hold their pixels until they're closed, so close a file's sets when it goes.
   useEffect(() => {
-    if (!count) return
-    const cached = cache.current.get(count)
+    const held = new Map<number, (ImageBitmap | null)[]>()
+    cache.current = held
+    return () => {
+      cache.current = null
+      for (const set of held.values()) closeAll(set)
+      setImages([])
+    }
+  }, [file])
+
+  useEffect(() => {
+    const held = cache.current
+    if (!count || !held) return
+    const cached = held.get(count)
     if (cached) return setImages(cached)
     let live = true
     // Wait for a resize to settle before decoding a new set.
@@ -215,7 +228,9 @@ function Thumbnails({
       const height = Math.round(HEIGHT * (window.devicePixelRatio || 1))
       thumbnails(file, thumbnailTimes(duration, count), height).then(
         (got) => {
-          cache.current.set(count, got)
+          // A reply for a file that's gone has nowhere to go.
+          if (cache.current !== held) return closeAll(got)
+          held.set(count, got)
           if (live) setImages(got)
         },
         () => {},
@@ -251,3 +266,5 @@ function Thumbnails({
 
   return <canvas ref={canvas} aria-hidden="true" className="absolute inset-0 size-full" />
 }
+
+const closeAll = (set: (ImageBitmap | null)[]) => set.forEach((image) => image?.close())

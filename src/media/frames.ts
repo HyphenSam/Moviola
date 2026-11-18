@@ -72,13 +72,26 @@ export async function thumbnails(file: File, times: number[], height: number): P
     await decodeAsPlayed(track)
     const [start, first] = await Promise.all([firstTimestamp(input), track.getFirstTimestamp()])
     const sink = new CanvasSink(track, { height: Math.round(height) })
-    const images: (ImageBitmap | null)[] = []
     // Before the first picture (audio can start a little earlier), show the first picture.
-    for await (const c of sink.canvasesAtTimestamps(times.map((t) => Math.max(t + start, first)))) {
-      images.push(c ? await createImageBitmap(c.canvas) : null)
-    }
-    return images
+    const at = times.map((t) => Math.max(t + start, first))
+    return await bitmapsOf(sink.canvasesAtTimestamps(at), (canvas) => createImageBitmap(canvas))
   } finally {
     input.dispose()
+  }
+}
+
+/** A bitmap of each canvas, null where there's none. A bitmap holds its pixels until it's closed, so
+ * if a frame fails part-way, the ones made so far are closed before the error goes on. */
+export async function bitmapsOf<C>(
+  canvases: AsyncIterable<{ canvas: C } | null>,
+  toBitmap: (canvas: C) => Promise<ImageBitmap>,
+): Promise<(ImageBitmap | null)[]> {
+  const images: (ImageBitmap | null)[] = []
+  try {
+    for await (const c of canvases) images.push(c ? await toBitmap(c.canvas) : null)
+    return images
+  } catch (error) {
+    for (const image of images) image?.close()
+    throw error
   }
 }
