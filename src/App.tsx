@@ -246,10 +246,11 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     encodeVideo: encodableHere.encoders ?? capabilities.encodeVideo,
   }
 
-  // Copying needs images on the clipboard, which takes PNG only.
+  // Copying needs images on the clipboard, which takes PNG only, whatever Save frame is set to.
   const canCopy = typeof window.ClipboardItem !== 'undefined' && !!navigator.clipboard?.write
   const copyFrame = () => {
-    const frame = source && planGrabFrame(source.info, player.time, DEFAULT_FRAME, capabilities).plan
+    const asPng = { format: 'png', lossless: false } as const
+    const frame = source && planGrabFrame(source.info, player.time, asPng, capabilities).plan
     if (!frame) return
     // The item takes the image's promise, so the write starts inside the click while the worker draws it.
     const written = job.copy(source.file, frame, (png) =>

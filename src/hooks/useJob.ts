@@ -182,7 +182,10 @@ export function useJob(client: WorkerClient) {
     (file: File, plan: FramePlan, write: (image: Promise<Blob>) => Promise<unknown>) => {
       if (slot.current.phase !== 'idle') return null
       go({ phase: 'copying' })
-      const image = client.run(file, plan, { type: 'memory' }).result.then(({ blob }) => blob!)
+      const image = client.run(file, plan, { type: 'memory' }).result.then(({ blob }) => {
+        if (!blob) throw new Error('no image came back.')
+        return blob
+      })
       let written: Promise<unknown>
       try {
         written = write(image)

@@ -141,6 +141,19 @@ describe('Grab frame', () => {
     expect(save()).toBeEnabled()
   })
 
+  it('says so when no image comes back to copy', async () => {
+    class FakeClipboardItem {
+      constructor(public items: Record<string, Promise<Blob>>) {}
+    }
+    ;(window as unknown as { ClipboardItem: unknown }).ClipboardItem = FakeClipboardItem
+    const { client, user } = await openOnFrame()
+    const write = vi.fn(async ([item]: FakeClipboardItem[]) => void (await item.items['image/png']))
+    vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue({ write } as unknown as Clipboard)
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
+    await act(async () => client.jobs[0].finish({ size: 0, blob: null }))
+    expect(await screen.findByText('The frame couldn’t be copied: no image came back.')).toBeInTheDocument()
+  })
+
   it('says so in plain words when the browser refuses the clipboard', async () => {
     ;(window as unknown as { ClipboardItem: unknown }).ClipboardItem = class {}
     const { user } = await openOnFrame()
