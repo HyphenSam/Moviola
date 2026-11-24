@@ -10,6 +10,7 @@ export const FALLBACK_APPS: AppLink[] = [
   { name: 'Bytesize', url: 'https://bytesize.hyphensam.com/', icon: 'https://apps.hyphensam.com/icons/bytesize.svg' },
   { name: 'Art Cleaner', url: 'https://cleaner.hyphensam.com/', icon: 'https://apps.hyphensam.com/icons/cleaner.svg' },
   { name: 'Moviola', url: 'https://moviola.hyphensam.com/', icon: 'https://apps.hyphensam.com/icons/moviola.svg' },
+  { name: 'Loupe', url: 'https://loupe.hyphensam.com/', icon: 'https://apps.hyphensam.com/icons/loupe.svg' },
 ]
 
 /** Https only: the list comes from another site, and its URLs become links

@@ -42,7 +42,7 @@ describe('parseApps', () => {
 
 describe('FALLBACK_APPS', () => {
   it('lists the sister sites, Moviola among them', () => {
-    expect(FALLBACK_APPS.map((a) => a.name)).toEqual(['Bytesize', 'Art Cleaner', 'Moviola'])
+    expect(FALLBACK_APPS.map((a) => a.name)).toEqual(['Bytesize', 'Art Cleaner', 'Moviola', 'Loupe'])
   })
 })
 
