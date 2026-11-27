@@ -1,10 +1,12 @@
 import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import type { SizeChanges } from '@/lib/frame-size'
 import { describeInfo, infoAsText, type MediaInfo } from '@/lib/info'
 import { Button } from './ui/Button'
 
-/** Media info (SPEC.md 6.1): everything known about the file, read-only, and a way to copy it. */
-export function MediaInfoView({ info }: { info: MediaInfo }) {
+/** Media info (SPEC.md 6.1): everything known about the file, read-only, and a way to copy it. `sizes`
+ * is how the first video track changes size as it plays, while it's checked and once it's known. */
+export function MediaInfoView({ info, sizes }: { info: MediaInfo; sizes: SizeChanges | 'checking' | null }) {
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -18,7 +20,7 @@ export function MediaInfoView({ info }: { info: MediaInfo }) {
       <Button
         className="self-start"
         onClick={() =>
-          navigator.clipboard.writeText(infoAsText(info)).then(
+          navigator.clipboard.writeText(infoAsText(info, sizes)).then(
             () => setCopied(true),
             () => {},
           )
@@ -27,7 +29,7 @@ export function MediaInfoView({ info }: { info: MediaInfo }) {
         {copied ? <Check /> : <Copy />}
         {copied ? 'Copied' : 'Copy as text'}
       </Button>
-      {describeInfo(info).map((group) => (
+      {describeInfo(info, sizes).map((group) => (
         <section key={group.title} aria-label={group.title}>
           <h3 className="text-[13px] font-medium text-ink-soft">{group.title}</h3>
           <dl className="mt-2 grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">

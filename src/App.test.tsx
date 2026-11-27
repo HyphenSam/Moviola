@@ -219,6 +219,71 @@ describe('App', () => {
     expect(within(view).getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
+  it('checks whether a WebM’s frames change size as it plays, and says so in Media info', async () => {
+    const webm = fakeInfo({
+      name: 'shrinks.webm',
+      container: 'webm',
+      tracks: [fakeVideoTrack({ codec: 'vp9', codecString: 'vp09.00.10.08', width: 960, height: 720 })],
+    })
+    const { client, user } = setup({ 'shrinks.webm': webm })
+    const file = video('shrinks.webm')
+    await choose(user, file)
+    const view = await screen.findByRole('region', { name: 'Media info' })
+    expect(within(view).getByText('Checking for size changes…')).toBeInTheDocument()
+    expect(client.scans).toMatchObject([{ file, trackId: 1 }])
+
+    await act(async () =>
+      client.scans[0].finish({
+        smallest: { width: 960, height: 1 },
+        largest: { width: 960, height: 720 },
+        changes: 90,
+      }),
+    )
+    expect(within(view).getByText('960 × 720, changes as it plays')).toBeInTheDocument()
+    expect(within(view).getByText('960 × 1 to 960 × 720, 90 changes')).toBeInTheDocument()
+    expect(within(view).queryByText('Checking for size changes…')).not.toBeInTheDocument()
+
+    await user.click(within(view).getByRole('button', { name: 'Copy as text' }))
+    expect(await navigator.clipboard.readText()).toContain(
+      'Size: 960 × 720, changes as it plays (960 × 1 to 960 × 720, 90 changes)',
+    )
+  })
+
+  it('shows the size alone once a check finds no change, or fails', async () => {
+    const vp9 = (name: string) =>
+      fakeInfo({ name, container: 'webm', tracks: [fakeVideoTrack({ codec: 'vp9', width: 640, height: 360 })] })
+    const { client, user } = setup({ 'same.webm': vp9('same.webm'), 'broken.webm': vp9('broken.webm') })
+    await choose(user, video('same.webm'))
+    await act(async () => client.scans[0].finish(null))
+    const view = await screen.findByRole('region', { name: 'Media info' })
+    expect(within(view).getByText('640 × 360')).toBeInTheDocument()
+    expect(within(view).queryByText('Checking for size changes…')).not.toBeInTheDocument()
+
+    await choose(user, video('broken.webm'))
+    await act(async () => client.scans[1].fail('Something went wrong'))
+    expect(within(screen.getByRole('region', { name: 'Media info' })).getByText('640 × 360')).toBeInTheDocument()
+    expect(screen.queryByText('Checking for size changes…')).not.toBeInTheDocument()
+  })
+
+  it('stops checking a file’s sizes when another opens, and doesn’t check codecs it can’t read', async () => {
+    const webm = fakeInfo({ name: 'a.webm', container: 'webm', tracks: [fakeVideoTrack({ codec: 'av1' })] })
+    const { client, user } = setup({ 'a.webm': webm })
+    await choose(user, video('a.webm'))
+    await waitFor(() => expect(client.scans).toHaveLength(1))
+    await choose(user, video('holiday.mp4'))
+    await screen.findByText('holiday.mp4')
+    expect(client.scans[0].cancelled).toBe(true)
+    // H.264: no scan, and nothing said about one.
+    expect(client.scans).toHaveLength(1)
+    expect(screen.queryByText('Checking for size changes…')).not.toBeInTheDocument()
+
+    // A late answer for the first file changes nothing.
+    await act(async () =>
+      client.scans[0].finish({ smallest: { width: 1, height: 1 }, largest: { width: 1920, height: 1080 }, changes: 1 }),
+    )
+    expect(screen.queryByText(/changes as it plays/)).not.toBeInTheDocument()
+  })
+
   it('says the browser is too old when it has no WebCodecs, and offers nothing else', () => {
     const client = fakeClient(() => fakeInfo())
     render(<App webCodecs={false} client={client} frames={fakeFrames()} />)

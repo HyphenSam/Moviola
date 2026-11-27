@@ -77,7 +77,8 @@ is lossless or re-encodes.
   the lossless audio container), `plans/` (one module per tool: settings + info + capabilities in,
   `Plan` or problems out; `plan.ts` holds the `Plan` type and the image jobs' `FramePlan` and `AnimationPlan`), `discarded.ts` (Mediabunny's discarded
   tracks as sentences), `progress.ts` (percentage, time left, size change), `bitrate.ts` (target
-  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
+  size and quality maths), `gif.ts` (gifenc: RGBA frames in, GIF bytes out), `wav.ts` (a WAV's size, and RIFF's 4 GiB limit), `webp.ts` (still WebPs in, animated WebP bytes out), `frame-size.ts` (a VP8, VP9 or AV1 keyframe's
+  size from its header, and how the sizes change), `timecode.ts`, `names.ts`, `settings.ts`, `protocol.ts` (page ↔ worker),
   `format-bytes.ts`, `leaving.ts` (what leaving or reloading would lose), `plan-problems.ts` (what's wrong with a plan, against itself and the file; `run`
   checks every plan with it, and `plans/planners.test.ts` runs every planner through it), `theme.ts` (auto, light, dark; the cookie), `apps.ts` (the app launcher's list), `colour.ts` (the
   colour space a browser's player assumes for a track), `i420.ts` (the BT.709 matrix, and where an I420
@@ -92,7 +93,8 @@ is lossless or re-encodes.
   progress, cancels on request.
 - `src/components/` the UI (`ui/` holds the primitives). `src/App.tsx` puts it together; it takes the
   worker client as a prop so tests pass a fake. `src/main.tsx` creates the real worker.
-- `src/hooks/` state: `useSource` (the open file and its info), `useJob` (the running job), `usePlayer`,
+- `src/hooks/` state: `useSource` (the open file and its info), `useSizeChanges` (whether its video
+  changes size as it plays, checked in the worker), `useJob` (the running job), `usePlayer`,
   `useTheme` (applies and remembers the theme).
 - `fixtures/` tiny media files made by `scripts/fixtures.sh`. Don't edit them by hand.
 

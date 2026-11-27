@@ -269,12 +269,44 @@ describe('describeInfo', () => {
     expect(track.rows.find((r) => r.label === 'Frame rate')).toBeUndefined()
   })
 
+  it('says when the first video track’s frames change size as it plays, and from what to what', () => {
+    const shrinking = { smallest: { width: 960, height: 1 }, largest: { width: 960, height: 720 }, changes: 90 }
+    const [, first, second] = describeInfo(
+      info({ tracks: [video({ codec: 'vp9', width: 960, height: 720 }), video({ id: 2 })] }),
+      shrinking,
+    )
+    expect(first.rows).toContainEqual({
+      label: 'Size',
+      value: '960 × 720, changes as it plays',
+      caption: '960 × 1 to 960 × 720, 90 changes',
+    })
+    expect(second.rows).toContainEqual({ label: 'Size', value: '1920 × 1080' })
+  })
+
+  it('counts a single size change as one', () => {
+    const once = { smallest: { width: 640, height: 360 }, largest: { width: 1280, height: 720 }, changes: 1 }
+    const [, track] = describeInfo(info({ tracks: [video({ width: 1280, height: 720 })] }), once)
+    expect(track.rows).toContainEqual(expect.objectContaining({ caption: '640 × 360 to 1280 × 720, 1 change' }))
+  })
+
+  it('says it’s still checking for size changes', () => {
+    const [, track] = describeInfo(info(), 'checking')
+    expect(track.rows).toContainEqual({ label: 'Size', value: '1920 × 1080', caption: 'Checking for size changes…' })
+  })
+
   it('leaves the tags group out when there are none', () => {
     expect(describeInfo(info()).map((g) => g.title)).not.toContain('Tags')
   })
 })
 
 describe('infoAsText', () => {
+  it('copies the size changes with the size', () => {
+    const changes = { smallest: { width: 960, height: 1 }, largest: { width: 960, height: 720 }, changes: 90 }
+    expect(infoAsText(info({ tracks: [video({ width: 960, height: 720 })] }), changes)).toContain(
+      'Size: 960 × 720, changes as it plays (960 × 1 to 960 × 720, 90 changes)',
+    )
+  })
+
   it('writes one Key: value per line, a heading per group and a blank line between groups', () => {
     const text = infoAsText(info({ tracks: [audio({ language: null })] }))
     expect(text).toBe(

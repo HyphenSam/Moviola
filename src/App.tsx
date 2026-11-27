@@ -26,6 +26,7 @@ import { canSaveToDisk, useJob } from './hooks/useJob'
 import { useKeyframe } from './hooks/useKeyframe'
 import { usePlayer } from './hooks/usePlayer'
 import { usePerSource } from './hooks/usePerSource'
+import { useSizeChanges } from './hooks/useSizeChanges'
 import { useSource, type Source } from './hooks/useSource'
 import { defaultTargetMB } from './lib/bitrate'
 import { APP_NAME } from './lib/brand'
@@ -168,6 +169,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
   // The playhead, shared by the player, the timeline and the tools that set times from it.
   const player = usePlayer(source?.id ?? null, source?.info.duration ?? 0, video?.frameRate ?? null)
   const tools = toolStates(source?.info ?? null)
+  const sizeChanges = useSizeChanges(client, source)
 
   /** The open file with what its tools are set to: the user's choices for it, else each one's default. */
   const settingsFor = (source: Source) => {
@@ -274,7 +276,7 @@ export function App({ webCodecs, client, frames }: { webCodecs: boolean; client:
     const { info } = file
     switch (file.tool) {
       case 'info':
-        return { view: <MediaInfoView info={info} />, range: null, action: null }
+        return { view: <MediaInfoView info={info} sizes={sizeChanges} />, range: null, action: null }
       case 'extract-audio': {
         // An audio file is converted, not extracted from (SPEC.md section 6).
         const converting = !hasVideo(info)

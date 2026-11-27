@@ -145,6 +145,12 @@ A read-only view of `MediaInfo` in the settings column, no primary action.
   below in caption ("H.264 High, avc1.640028"), then video size, frame rate, rotation, colour (SDR
   or HDR, with primaries/transfer when known), or sample rate and channels ("48 kHz, stereo"),
   bitrate (about), language, name, default flag, and "Can't decode in this browser" if so.
+- **Size changes**: VP8, VP9 and AV1 can change frame size mid-stream while the container names only
+  the first size (clips made to shrink once shared). Once a file opens, the worker reads the header of
+  every keyframe of the first video track (`frame-size.ts`) and Media info's size says "960 × 720,
+  changes as it plays", with the smallest and largest sizes and the number of changes in caption.
+  Until it answers, the caption says "Checking for size changes…". Opening another file cancels it.
+  A change between keyframes, and H.264 or HEVC changing size, go unseen.
 - **Tags**: any metadata tags, key and value.
 - A secondary button "Copy as text" copies all of it as plain text, one `Key: value` per line, for
   pasting into a forum or bug report.

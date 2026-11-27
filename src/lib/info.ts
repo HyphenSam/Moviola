@@ -1,4 +1,5 @@
 import type { MediaCodec, MetadataTags, Rotation } from 'mediabunny'
+import type { SizeChanges } from './frame-size'
 import { formatTimecode } from './timecode'
 
 /** What the planners and the UI know about the open file (SPEC.md section 4). Plain data: it crosses
@@ -266,8 +267,9 @@ export type InfoGroup = { title: string; rows: InfoRow[] }
 const KIND_TITLES = { video: 'Video track', audio: 'Audio track', subtitle: 'Subtitle track' }
 
 /** Everything Media info shows, as groups of rows: the view renders them and "Copy as text" writes
- * them, so the two never disagree. */
-export function describeInfo(info: MediaInfo): InfoGroup[] {
+ * them, so the two never disagree. `sizes` is how the first video track's frames change size, while
+ * it's being checked and once it's known. */
+export function describeInfo(info: MediaInfo, sizes: SizeChanges | 'checking' | null = null): InfoGroup[] {
   const overall = overallBitrate(info)
   const groups: InfoGroup[] = [
     {
@@ -292,7 +294,17 @@ export function describeInfo(info: MediaInfo): InfoGroup[] {
       },
     ]
     if (track.kind === 'video') {
-      rows.push({ label: 'Size', value: `${track.width} × ${track.height}` })
+      const size = `${track.width} × ${track.height}`
+      const changes = counts.video === 0 ? sizes : null
+      if (changes === 'checking') rows.push({ label: 'Size', value: size, caption: 'Checking for size changes…' })
+      else if (changes) {
+        const { smallest, largest } = changes
+        rows.push({
+          label: 'Size',
+          value: `${size}, changes as it plays`,
+          caption: `${smallest.width} × ${smallest.height} to ${largest.width} × ${largest.height}, ${changes.changes} ${changes.changes === 1 ? 'change' : 'changes'}`,
+        })
+      } else rows.push({ label: 'Size', value: size })
       if (track.frameRate) rows.push({ label: 'Frame rate', value: formatFrameRate(track.frameRate) })
       rows.push({ label: 'Rotation', value: track.rotation ? `${track.rotation}°` : 'None' })
       const { primaries, transfer, hdr } = track.colour
@@ -320,8 +332,8 @@ export function describeInfo(info: MediaInfo): InfoGroup[] {
 }
 
 /** One `Key: value` per line, a heading per group, for pasting into a forum post or bug report. */
-export function infoAsText(info: MediaInfo): string {
-  return describeInfo(info)
+export function infoAsText(info: MediaInfo, sizes: SizeChanges | 'checking' | null = null): string {
+  return describeInfo(info, sizes)
     .map((group) =>
       [group.title, ...group.rows.map((r) => `${r.label}: ${r.value}${r.caption ? ` (${r.caption})` : ''}`)].join('\n'),
     )
