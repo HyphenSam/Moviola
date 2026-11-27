@@ -105,6 +105,26 @@ describe('worker handle', () => {
     },
   )
 
+  it('answers how a video track’s frames change size', async () => {
+    const replies: Reply[] = []
+    await handle({ type: 'sizes', id: 13, file: fixture('vp9-resize.webm'), trackId: 1 }, (r) => replies.push(r))
+    expect(replies).toEqual([
+      {
+        type: 'done',
+        id: 13,
+        value: { smallest: { width: 160, height: 90 }, largest: { width: 320, height: 180 }, changes: 2 },
+      },
+    ])
+  })
+
+  it('stops looking for size changes when cancelled, answering with a failure the page ignores', async () => {
+    const { replies, send } = worker()
+    const scanning = send({ type: 'sizes', id: 14, file: fixture('vp9-resize.webm'), trackId: 1 })
+    await send({ type: 'cancel', id: 14 })
+    await scanning
+    expect(replies).toEqual([{ type: 'failed', id: 14, message: expect.any(String) }])
+  })
+
   it('ignores a cancel for a job that isn’t running', async () => {
     const replies: Reply[] = []
     await handle({ type: 'cancel', id: 99 }, (reply) => replies.push(reply))

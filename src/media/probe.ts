@@ -16,6 +16,7 @@ import {
   type InputFormat,
   type InputTrack,
 } from 'mediabunny'
+import { keyframeSize, sizeChanges, SIZED_CODECS, type SizeChanges } from '@/lib/frame-size'
 import { isHdrTransfer, PCM_BITS, plainTags, type Container, type MediaInfo, type Track } from '@/lib/info'
 
 export const CANT_OPEN = 'Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.'
@@ -103,6 +104,30 @@ export async function keyTimestamp(track: InputTrack, timestamp: number): Promis
   const options = { verifyKeyPackets: true }
   const packet = (await sink.getKeyPacket(timestamp, options)) ?? (await sink.getFirstKeyPacket(options))
   return packet?.timestamp ?? null
+}
+
+/** How a video track's frames change size as it plays, from the header of every keyframe in the file
+ * (Matroska is read cluster by cluster, so that's most of it); null when they keep one size, the
+ * track isn't there, or its codec isn't one whose headers are read. A size change between keyframes
+ * goes unseen. */
+export async function sizeChangesOf(file: File, trackId: number, signal: AbortSignal): Promise<SizeChanges | null> {
+  signal.throwIfAborted()
+  const input = new Input({ source: new BlobSource(file), formats: [...FORMATS.keys()] })
+  try {
+    const track = (await input.getVideoTracks()).find((t) => t.id === trackId)
+    const codec = await track?.getCodec()
+    if (!track || !codec || !SIZED_CODECS.includes(codec)) return null
+    const sink = new EncodedPacketSink(track)
+    const sizes = []
+    for (let packet = await sink.getFirstKeyPacket(); packet; packet = await sink.getNextKeyPacket(packet)) {
+      signal.throwIfAborted()
+      const size = keyframeSize(codec, packet.data)
+      if (size) sizes.push(size)
+    }
+    return sizeChanges(sizes)
+  } finally {
+    input.dispose()
+  }
 }
 
 /** Whether a video track stores frames out of display order (B-frames), from its first packets in

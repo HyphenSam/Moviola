@@ -4,7 +4,7 @@ import { Input } from 'mediabunny'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FILE_TYPES } from '@/lib/file-types'
 import type { AudioTrack, Container, MediaInfo, VideoTrack } from '@/lib/info'
-import { CANT_OPEN, FORMATS, probe } from './probe'
+import { CANT_OPEN, FORMATS, probe, sizeChangesOf } from './probe'
 
 const fixture = (name: string) => new File([readFileSync(join(import.meta.dirname, '../../fixtures', name))], name)
 
@@ -179,6 +179,34 @@ describe('probe', () => {
   it('refuses a file that isn’t media with the sentence the user sees', async () => {
     await expect(probe(fixture('notvideo.txt'))).rejects.toThrow(CANT_OPEN)
     expect(CANT_OPEN).toBe('Moviola can’t open this file. It reads MP4, MOV, MKV, WebM and MPEG-TS video.')
+  })
+})
+
+describe('sizeChangesOf', () => {
+  const live = () => new AbortController().signal
+  // Each resize fixture is 320×180, 320×120, then 160×90, a second each (scripts/fixtures.sh).
+  const RESIZED = { smallest: { width: 160, height: 90 }, largest: { width: 320, height: 180 }, changes: 2 }
+
+  it.each(['vp8', 'vp9', 'av1'])('finds the sizes a %s video changes to from its keyframes', async (codec) => {
+    const file = fixture(`${codec}-resize.webm`)
+    // The container names only the first size.
+    expect(video(await probe(file))[0]).toMatchObject({ codec, width: 320, height: 180 })
+    expect(await sizeChangesOf(file, 1, live())).toEqual(RESIZED)
+  })
+
+  it('finds none in a video that keeps its size', async () => {
+    expect(await sizeChangesOf(fixture('vp9-opus.webm'), 1, live())).toBeNull()
+  })
+
+  it('reads nothing from codecs whose headers it doesn’t read, or a track that isn’t there', async () => {
+    expect(await sizeChangesOf(fixture('h264-aac.mp4'), 1, live())).toBeNull()
+    expect(await sizeChangesOf(fixture('vp9-resize.webm'), 99, live())).toBeNull()
+  })
+
+  it('stops when aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    await expect(sizeChangesOf(fixture('vp9-resize.webm'), 1, controller.signal)).rejects.toThrow()
   })
 })
 

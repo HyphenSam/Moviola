@@ -73,6 +73,20 @@ describe('createClient', () => {
     await expect(result).resolves.toEqual([])
   })
 
+  it('asks how a video track’s frames change size, and cancels that by its id', async () => {
+    const { port, sent, reply } = fakePort()
+    const client = createClient(port)
+    const file = new File(['x'], 'a.webm')
+    const scan = client.sizeChanges(file, 1)
+    expect(sent).toEqual([{ type: 'sizes', id: 1, file, trackId: 1 }])
+    const value = { smallest: { width: 960, height: 1 }, largest: { width: 960, height: 720 }, changes: 90 }
+    reply({ type: 'done', id: 1, value })
+    await expect(scan.result).resolves.toEqual(value)
+
+    client.sizeChanges(file, 1).cancel()
+    expect(sent.at(-1)).toEqual({ type: 'cancel', id: 2 })
+  })
+
   it('rejects with the worker’s message when it fails', async () => {
     const { port, reply } = fakePort()
     const client = createClient(port)

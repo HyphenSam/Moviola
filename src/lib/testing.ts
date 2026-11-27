@@ -2,6 +2,7 @@
 // (CLAUDE.md): each behaves like the real thing in the ways the tests rely on.
 import type { Frame, FrameSource, OpenFrames } from '@/media/frames'
 import type { Capabilities } from './capabilities'
+import type { SizeChanges } from './frame-size'
 import type { AudioTrack, MediaInfo, VideoTrack } from './info'
 import type { JobPlan } from './plan'
 import type { RunResult, Size, TargetSpec, WorkerCapabilities, WorkerClient } from './protocol'
@@ -87,11 +88,20 @@ export type FakeJob = {
   fail(message: string): void
 }
 
+/** A size check the fake client was asked for; the test settles it. */
+export type FakeScan = {
+  file: File
+  trackId: number
+  cancelled: boolean
+  finish(value: SizeChanges | null): void
+  fail(message: string): void
+}
+
 /** A worker client whose probe answers with `probe(file)`; throwing (or rejecting) is a failed probe.
  * It can encode what `capabilities` says: everything, unless told otherwise; at a size other than
  * 1080p, what `encodable(size)` says (the same, unless told otherwise). Keyframes fall every 2 s,
  * as in the fixtures; thumbnails come back blank (jsdom can't draw). `keyframes` and `thumbnailed`
- * list what was asked. Runs wait in `jobs` until the test finishes or fails them; cancelling rejects
+ * list what was asked. Size checks wait in `scans` until the test settles them. Runs wait in `jobs` until the test finishes or fails them; cancelling rejects
  * as the worker does, unless `holdCancels` is set: then a cancelled job waits for the test to settle
  * it, like a worker that hasn't answered yet (and may answer that the job finished after all). */
 export function fakeClient(
@@ -103,17 +113,20 @@ export function fakeClient(
   jobs: FakeJob[]
   keyframes: { file: File; trackId: number; time: number }[]
   thumbnailed: { file: File; times: number[]; height: number }[]
+  scans: FakeScan[]
   holdCancels: boolean
 } {
   const probed: File[] = []
   const jobs: FakeJob[] = []
   const keyframes: { file: File; trackId: number; time: number }[] = []
   const thumbnailed: { file: File; times: number[]; height: number }[] = []
+  const scans: FakeScan[] = []
   const client: ReturnType<typeof fakeClient> = {
     probed,
     jobs,
     keyframes,
     thumbnailed,
+    scans,
     holdCancels: false,
     capabilities: async () => ({
       encodeVideo: capabilities.encodeVideo,
@@ -128,6 +141,18 @@ export function fakeClient(
     thumbnails: async (file, times, height) => {
       thumbnailed.push({ file, times, height })
       return times.map(() => null)
+    },
+    sizeChanges: (file, trackId) => {
+      const result = deferred<SizeChanges | null>()
+      const scan: FakeScan = {
+        file,
+        trackId,
+        cancelled: false,
+        finish: result.resolve,
+        fail: (message) => result.reject(new Error(message)),
+      }
+      scans.push(scan)
+      return { result: result.promise, cancel: () => void (scan.cancelled = true) }
     },
     probe: async (file) => {
       probed.push(file)

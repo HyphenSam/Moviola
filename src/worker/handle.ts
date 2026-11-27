@@ -4,7 +4,7 @@ import type { Reply, Request, TargetSpec } from '@/lib/protocol'
 import { capabilities, encodableAt } from '@/media/encoders'
 import { thumbnails } from '@/media/frames'
 import { grabFrame, makeAnimation } from '@/media/images'
-import { keyframeAt, probe } from '@/media/probe'
+import { keyframeAt, probe, sizeChangesOf } from '@/media/probe'
 import { JobProblem, run } from '@/media/run'
 
 export const SAME_FILE = 'That’s the file you have open. Save under another name, so the original is kept.'
@@ -32,7 +32,7 @@ async function isSource(handle: FileSystemFileHandle, source: File) {
   return chosen.name === source.name && chosen.size === source.size && chosen.lastModified === source.lastModified
 }
 
-/** Jobs running now, by request id, so a cancel can reach them. */
+/** Jobs and size scans running now, by request id, so a cancel can reach them. */
 const running = new Map<number, AbortController>()
 
 /** Runs one request and posts its replies. Kept apart from the worker's global scope so Node tests
@@ -58,6 +58,17 @@ export async function handle(request: Request, post: (reply: Reply, transfer?: T
           { type: 'done', id: request.id, value: images },
           images.filter((i) => i !== null),
         )
+        break
+      }
+      case 'sizes': {
+        const controller = new AbortController()
+        running.set(request.id, controller)
+        try {
+          const value = await sizeChangesOf(request.file, request.trackId, controller.signal)
+          post({ type: 'done', id: request.id, value })
+        } finally {
+          running.delete(request.id)
+        }
         break
       }
       case 'cancel':

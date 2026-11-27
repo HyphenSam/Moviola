@@ -1,4 +1,5 @@
 import type { Capabilities } from './capabilities'
+import type { SizeChanges } from './frame-size'
 import type { MediaInfo } from './info'
 import type { JobPlan } from './plan'
 
@@ -17,6 +18,7 @@ export type Request =
   | { type: 'encodable'; id: number; size: Size }
   | { type: 'keyframe'; id: number; file: File; trackId: number; time: number }
   | { type: 'thumbnails'; id: number; file: File; times: number[]; height: number }
+  | { type: 'sizes'; id: number; file: File; trackId: number }
   | { type: 'run'; id: number; file: File; plan: JobPlan; target: TargetSpec }
   | { type: 'cancel'; id: number }
 
@@ -45,6 +47,9 @@ export type WorkerClient = {
   /** Frames of the primary video track at `times`, `height` pixels high, rotation applied; null for
    * a frame that couldn't be decoded, and none at all when the video can't be. */
   thumbnails(file: File, times: number[], height: number): Promise<(ImageBitmap | null)[]>
+  /** How a video track's frames change size as it plays, read from every keyframe: null when they
+   * don't, or when its codec isn't VP8, VP9 or AV1. It reads most of the file, so it can be cancelled. */
+  sizeChanges(file: File, trackId: number): { result: Promise<SizeChanges | null>; cancel(): void }
   run(file: File, plan: JobPlan, target: TargetSpec, onProgress?: (fraction: number | null) => void): Job
 }
 
@@ -90,6 +95,10 @@ export function createClient(port: Port): WorkerClient {
   port.addEventListener('error', stop)
   port.addEventListener('messageerror', stop)
 
+  const cancel = (id: number) => {
+    if (!stopped) port.postMessage({ type: 'cancel', id })
+  }
+
   function send<T>(request: Request, onProgress?: Waiting['onProgress']): Promise<T> {
     if (stopped) return Promise.reject(new Error(WORKER_STOPPED))
     return new Promise<T>((resolve, reject) => {
@@ -105,14 +114,13 @@ export function createClient(port: Port): WorkerClient {
     keyframe: (file, trackId, time) => send<number | null>({ type: 'keyframe', id: nextId++, file, trackId, time }),
     thumbnails: (file, times, height) =>
       send<(ImageBitmap | null)[]>({ type: 'thumbnails', id: nextId++, file, times, height }),
+    sizeChanges: (file, trackId) => {
+      const id = nextId++
+      return { result: send<SizeChanges | null>({ type: 'sizes', id, file, trackId }), cancel: () => cancel(id) }
+    },
     run: (file, plan, target, onProgress) => {
       const id = nextId++
-      return {
-        result: send<RunResult>({ type: 'run', id, file, plan, target }, onProgress),
-        cancel: () => {
-          if (!stopped) port.postMessage({ type: 'cancel', id })
-        },
-      }
+      return { result: send<RunResult>({ type: 'run', id, file, plan, target }, onProgress), cancel: () => cancel(id) }
     },
   }
 }
