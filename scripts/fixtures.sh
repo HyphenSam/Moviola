@@ -64,6 +64,24 @@ ff -i vp9-opus.webm -c copy -output_ts_offset 10 vp9-opus-late.webm
 # Stored 320×180 with 90° display rotation, so it shows as 180×320.
 ff -display_rotation 90 -i h264-only.mp4 -c copy rotated.mp4
 
+# Video whose frames change size as it plays, as in clips made to shrink once shared, while the
+# container names only the first size: 320×180, 320×120, then 160×90, a second each and each starting
+# on a keyframe. Made in a folder here, since a concat list's paths are read from beside it.
+resized() {
+  local codec=$1 tmp size
+  shift
+  tmp=$(mktemp -d resize.XXXX)
+  for size in 320x180 320x120 160x90; do
+    ff -f lavfi -i "testsrc2=size=$size:rate=25:duration=1" "$@" -g 25 "$tmp/$size.webm"
+    echo "file '$size.webm'" >> "$tmp/list.txt"
+  done
+  ff -f concat -i "$tmp/list.txt" -c copy "$codec-resize.webm"
+  rm -r "$tmp"
+}
+resized vp8 -c:v libvpx -crf 30 -b:v 200k -deadline realtime -cpu-used 8
+resized vp9 -c:v libvpx-vp9 -crf 45 -b:v 0 -deadline realtime -cpu-used 8
+resized av1 -c:v libaom-av1 -crf 50 -cpu-used 8 -usage realtime
+
 # shellcheck disable=SC2046
 ff $(tone 440) -c:a aac -b:a 64k aac.m4a
 
